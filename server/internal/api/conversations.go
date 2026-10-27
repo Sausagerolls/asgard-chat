@@ -221,7 +221,10 @@ func (s *Server) createConversation(w http.ResponseWriter, r *http.Request) erro
 	}
 	if in.Kind == "community" {
 		// Every community starts with an announcements channel and a general chat.
-		for _, sub := range []struct{ kind, title string; perms int64 }{
+		for _, sub := range []struct {
+			kind, title string
+			perms       int64
+		}{
 			{"channel", "Announcements", defaultChannelPerms}, {"group", "General", defaultGroupPerms},
 		} {
 			subID := uuid.New()

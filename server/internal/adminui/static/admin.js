@@ -67,7 +67,7 @@ const loaders = {
   async dashboard() {
     const s = await api("GET", "/admin/stats");
     const items = [["Users", s.users], ["Online now", s.online_users], ["Devices", s.devices], ["Conversations", s.conversations],
-      ["Messages stored", s.messages], ["Active stories", s.active_stories], ["Media", bytes(s.media_bytes)], ["Database", bytes(s.database_bytes)],
+      ["Messages stored", s.messages], ["Media", bytes(s.media_bytes)], ["Database", bytes(s.database_bytes)],
       ["Push", s.push_enabled ? "On" : "Off"], ["Calls", s.calls_enabled ? "On" : "Off"], ["Bots", s.bots], ["Version", s.version]];
     $("#stats").innerHTML = items.map(([l, v]) => `<div class="card stat"><div class="value">${esc(v)}</div><div class="label">${esc(l)}</div></div>`).join("");
   },
@@ -87,6 +87,7 @@ const loaders = {
     const list = await api("GET", "/admin/audit");
     $("#audit-rows").innerHTML = list.map((a) => `<tr><td>${date(a.at)}</td><td>${esc(a.actor || "system")}</td><td><code>${esc(a.action)}</code></td><td>${esc(a.target)}</td></tr>`).join("");
   },
+  async push() { renderPush(await api("GET", "/admin/push")); },
   async settings() {
     const s = await api("GET", "/admin/settings");
     const f = $("#settings-form");
@@ -159,6 +160,66 @@ $("#settings-form").addEventListener("submit", async (e) => {
   body.default_quota_bytes = (+f.default_quota_mb.value || 0) * 1048576;
   try { const s = await api("PUT", "/admin/settings", body); $("#server-name").textContent = s.server_name; $("#settings-saved").textContent = "Saved."; }
   catch (err) { dialog(err.message); }
+});
+
+function renderPush(p) {
+  const state = (src) => src.configured
+    ? `<span class="pill on">On</span>${src.source === "environment" ? '<span class="pill">from server files</span>' : ""}`
+    : '<span class="pill off">Off</span>';
+  $("#apns-state").innerHTML = state(p.apns);
+  $("#fcm-state").innerHTML = state(p.fcm);
+  $("#apns-remove").hidden = p.apns.source !== "admin";
+  $("#fcm-remove").hidden = p.fcm.source !== "admin";
+  const a = $("#apns-form").elements;
+  a.key_id.value = p.apns.key_id || ""; a.team_id.value = p.apns.team_id || "";
+  a.topic.value = p.apns.topic || p.default_topic || "";
+  $("#apns-msg").textContent = p.apns.updated_at ? "Saved " + date(p.apns.updated_at) : "";
+  $("#fcm-msg").textContent = p.fcm.project_id ? `Project ${p.fcm.project_id}` : "";
+  const relay = p.relay ? `Official apps notify through the Asgard push relay (${esc(p.relay.url)}): ${p.devices.relay} devices. ` : "";
+  $("#push-summary").innerHTML = `<span class="muted">${relay}${p.devices.apns} Apple and ${p.devices.fcm} Android devices use this server's own keys.</span>`
+    + (p.can_store ? "" : '<span class="error">Set ASGARD_MASTER_KEY on the server before uploading keys.</span>');
+}
+
+const readFile = (input) => input.files[0] ? input.files[0].text() : Promise.resolve("");
+
+$("#apns-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target.elements, msg = $("#apns-msg");
+  const key = (await readFile(f.file)) || f.key.value;
+  if (!key.trim()) { msg.textContent = "Choose the .p8 file or paste the key."; return; }
+  msg.textContent = "Checking with Apple…";
+  try {
+    renderPush(await api("PUT", "/admin/push/apns", { key, key_id: f.key_id.value, team_id: f.team_id.value, topic: f.topic.value }));
+    f.key.value = ""; f.file.value = ""; msg.textContent = "Saved. Apple accepted the key.";
+  } catch (err) { msg.textContent = err.message; }
+});
+
+$("#fcm-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target.elements, msg = $("#fcm-msg");
+  const credentials = (await readFile(f.file)) || f.credentials.value;
+  if (!credentials.trim()) { msg.textContent = "Choose the JSON file or paste it."; return; }
+  msg.textContent = "Checking with Google…";
+  try {
+    renderPush(await api("PUT", "/admin/push/fcm", { credentials }));
+    f.credentials.value = ""; f.file.value = ""; msg.textContent = "Saved. Google accepted the credentials.";
+  } catch (err) { msg.textContent = err.message; }
+});
+
+$("#apns-remove").addEventListener("click", async () => {
+  if (await dialog("Remove the Apple push key? iPhones stop getting notifications.", true)) renderPush(await api("DELETE", "/admin/push/apns"));
+});
+$("#fcm-remove").addEventListener("click", async () => {
+  if (await dialog("Remove the Google credentials? Android phones stop getting notifications.", true)) renderPush(await api("DELETE", "/admin/push/fcm"));
+});
+$("#push-test").addEventListener("click", async () => {
+  const out = $("#push-test-result");
+  out.textContent = "Sending…";
+  try {
+    const res = await api("POST", "/admin/push/test");
+    const label = { sent: "sent", no_token: "hasn't enabled notifications", failed: "failed" };
+    out.innerHTML = res.map((r) => `${esc(r.name || "Device")}: ${label[r.status]}${r.error ? " — " + esc(r.error) : ""}`).join("<br>") || "No devices.";
+  } catch (err) { out.textContent = err.message; }
 });
 
 async function start() {

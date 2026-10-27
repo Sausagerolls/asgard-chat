@@ -16,20 +16,20 @@ import (
 func (s *Server) adminStats(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	st := map[string]any{}
-	var users, bots, devices, convs, messages, stories int64
+	var users, bots, devices, convs, messages int64
 	var mediaBytes int64
 	s.db.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM users WHERE NOT is_bot), (SELECT count(*) FROM users WHERE is_bot),
 		(SELECT count(*) FROM devices), (SELECT count(*) FROM conversations WHERE kind <> 'saved'),
-		(SELECT count(*) FROM messages), (SELECT count(*) FROM stories WHERE expires_at > now()),
-		(SELECT coalesce(sum(size), 0) FROM media)`).Scan(&users, &bots, &devices, &convs, &messages, &stories, &mediaBytes)
+		(SELECT count(*) FROM messages),
+		(SELECT coalesce(sum(size), 0) FROM media)`).Scan(&users, &bots, &devices, &convs, &messages, &mediaBytes)
 	onlineDevices, onlineUsers := s.hub.Stats()
 	var dbSize int64
 	s.db.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&dbSize)
 	st["users"], st["bots"], st["devices"], st["conversations"] = users, bots, devices, convs
-	st["messages"], st["active_stories"], st["media_bytes"], st["database_bytes"] = messages, stories, mediaBytes, dbSize
+	st["messages"], st["media_bytes"], st["database_bytes"] = messages, mediaBytes, dbSize
 	st["online_users"], st["online_devices"] = onlineUsers, onlineDevices
-	st["version"], st["push_enabled"], st["calls_enabled"] = Version, s.cfg.PushEnabled(), s.cfg.CallsEnabled()
+	st["version"], st["push_enabled"], st["calls_enabled"] = Version, s.push.Any(), s.cfg.CallsEnabled()
 	writeJSON(w, http.StatusOK, st)
 	return nil
 }
@@ -292,9 +292,6 @@ func (s *Server) adminPutSettings(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	st.ServerName = trim(st.ServerName, 64)
-	if st.StoryTTLHours <= 0 || st.StoryTTLHours > 48 {
-		st.StoryTTLHours = 24
-	}
 	raw, _ := json.Marshal(st)
 	if _, err := s.db.Exec(r.Context(), `INSERT INTO server_settings(key, value) VALUES ('server', $1)
 		ON CONFLICT (key) DO UPDATE SET value = $1`, raw); err != nil {

@@ -57,11 +57,12 @@ public struct Session: Codable, Sendable {
 
 public struct ServerInfo: Codable, Sendable {
     public struct Features: Codable, Sendable {
-        public var calls, push, media, stories, bots, communities, channels: Bool
+        public var calls, push, media, bots, communities, channels: Bool
         public var serverBots: Bool
+        public var voiceRooms: Bool?
         enum CodingKeys: String, CodingKey {
-            case calls, push, media, stories, bots, communities, channels
-            case serverBots = "server_bots"
+            case calls, push, media, bots, communities, channels
+            case serverBots = "server_bots", voiceRooms = "voice_rooms"
         }
     }
     public var name: String
@@ -71,14 +72,24 @@ public struct ServerInfo: Codable, Sendable {
     public var features: Features
     public var maxUploadBytes: Int64
     public var livekitURL: String
+    public var pushRelay: PushRelay?
+
+    public struct PushRelay: Codable, Sendable {
+        public var url: String
+        public var serverID: String
+        enum CodingKeys: String, CodingKey { case url, serverID = "server_id" }
+    }
     enum CodingKeys: String, CodingKey {
         case name, version, `protocol`, features
-        case openRegistration = "open_registration", maxUploadBytes = "max_upload_bytes", livekitURL = "livekit_url"
+        case openRegistration = "open_registration", maxUploadBytes = "max_upload_bytes", livekitURL = "livekit_url", pushRelay = "push_relay"
     }
 }
 
 public enum ConversationKind: String, Codable, Sendable, CaseIterable {
     case dm, group, channel, community, saved
+
+    /// Groups and channels have an always-open voice room.
+    public var hasVoiceRoom: Bool { self == .group || self == .channel }
 }
 
 public enum MemberRole: String, Codable, Sendable, CaseIterable, Comparable {
@@ -213,24 +224,6 @@ public struct SendRequest: Codable, Sendable {
     }
 }
 
-public struct Story: Codable, Hashable, Identifiable, Sendable {
-    public var id: UUID
-    public var userID: UUID
-    public var senderDeviceID: UUID
-    public var ciphertext: Data
-    public var signature: Data
-    public var wrappedKey: Data?
-    public var createdAt: Date
-    public var expiresAt: Date
-    public var viewed: Bool
-    public var viewCount: Int
-    enum CodingKeys: String, CodingKey {
-        case id, ciphertext, signature, viewed
-        case userID = "user_id", senderDeviceID = "sender_device_id", wrappedKey = "wrapped_key"
-        case createdAt = "created_at", expiresAt = "expires_at", viewCount = "view_count"
-    }
-}
-
 public struct Invite: Codable, Hashable, Identifiable, Sendable {
     public var code: String
     public var note: String
@@ -257,14 +250,13 @@ public struct CallJoin: Codable, Sendable {
 
 public struct AdminStats: Codable, Sendable {
     public var users, bots, devices, conversations, messages: Int
-    public var activeStories: Int
     public var mediaBytes, databaseBytes: Int64
     public var onlineUsers, onlineDevices: Int
     public var version: String
     public var pushEnabled, callsEnabled: Bool
     enum CodingKeys: String, CodingKey {
         case users, bots, devices, conversations, messages, version
-        case activeStories = "active_stories", mediaBytes = "media_bytes", databaseBytes = "database_bytes"
+        case mediaBytes = "media_bytes", databaseBytes = "database_bytes"
         case onlineUsers = "online_users", onlineDevices = "online_devices", pushEnabled = "push_enabled", callsEnabled = "calls_enabled"
     }
 }
@@ -330,4 +322,34 @@ public enum JSONValue: Codable, Hashable, Sendable {
     public var string: String? { if case .string(let s) = self { return s }; return nil }
     public var bool: Bool? { if case .bool(let b) = self { return b }; return nil }
     public var array: [JSONValue]? { if case .array(let a) = self { return a }; return nil }
+}
+
+/// Someone in a conversation's always-open voice room.
+public struct VoiceParticipant: Codable, Hashable, Identifiable, Sendable {
+    public var userID: UUID
+    public var deviceID: UUID
+    public var name: String
+    public var muted: Bool
+    public var video: Bool
+    public var joinedAt: Date
+    public var id: UUID { deviceID }
+    enum CodingKeys: String, CodingKey { case name, muted, video, userID = "user_id", deviceID = "device_id", joinedAt = "joined_at" }
+    public init(userID: UUID, deviceID: UUID, name: String, muted: Bool, video: Bool, joinedAt: Date) {
+        self.userID = userID; self.deviceID = deviceID; self.name = name; self.muted = muted; self.video = video; self.joinedAt = joinedAt
+    }
+}
+
+public struct VoiceRoomState: Codable, Sendable {
+    public var conversationID: UUID
+    public var room: String
+    public var participants: [VoiceParticipant]
+    enum CodingKeys: String, CodingKey { case room, participants, conversationID = "conversation_id" }
+}
+
+public struct VoiceJoin: Codable, Sendable {
+    public var url: String
+    public var token: String
+    public var room: String
+    public var first: Bool
+    public var participants: [VoiceParticipant]
 }

@@ -16,8 +16,18 @@ and silent sends; polls, events with RSVP, live location; voice notes with
 waveforms and playback speed; photos, videos and files; link previews generated
 on-device; drafts, folders, archive, mute, chat lock with Face ID; saved messages.
 
-**Social** — 24-hour encrypted stories with audiences and view lists; broadcast
-channels with comment threads; communities of groups with announcements.
+**Social** — broadcast channels with comment threads; communities of groups
+with announcements.
+
+**Voice rooms** — every group, channel and community has an always-open
+voice/video room, Discord style: see who's in it from the chat, drop in and out
+whenever you like, nobody gets rung.
+
+**History sync & recovery** — turn on history sync to get a recovery key
+(13 groups of 4 characters, also shown as a QR code). Every message key is
+additionally locked to it, so newly linked devices receive your full history,
+and if you lose every device you can sign in and restore with the key. The key
+travels between your devices end-to-end encrypted; the server never sees it.
 
 **Calls** — 1:1 and group voice/video over LiveKit with end-to-end media
 encryption, CallKit ringing, screen share, Dynamic Island Live Activity.
@@ -33,7 +43,7 @@ APNs/FCM push, nightly encrypted backups with restic.
 
 ## Encryption
 
-Every message, attachment, reaction, edit, poll vote and story is encrypted on
+Every message, attachment, reaction, edit, poll vote and voice room key is encrypted on
 the sending device with a fresh key, wrapped for each recipient device
 (X25519 + HKDF + ChaCha20-Poly1305) and signed (Ed25519). The server stores
 ciphertext and routing metadata only. See [docs/PROTOCOL.md](docs/PROTOCOL.md)
@@ -47,7 +57,9 @@ security (MLS is planned) and has not been audited.
 | `server/` | Go server: API, WebSocket, push, jobs, admin UI, CLI |
 | `deploy/` | Docker Compose stack: Caddy, Asgard, Postgres, LiveKit, backups |
 | `ios/` | SwiftUI app, extensions and the `AsgardKit` Swift package |
-| `android/`, `web/` | Planned clients (see roadmap) |
+| `ios/Mac/` | Native macOS app (SwiftUI, shares AsgardKit) |
+| `android/` | Native Android app (Kotlin, Jetpack Compose, LiveKit) |
+| `web/` | Planned web client (see roadmap) |
 | `design/icon/` | App icon source (`render_icon.swift`) and renders |
 | `docs/` | Protocol and roadmap |
 
@@ -76,11 +88,17 @@ docker compose exec backup backup.sh now
 
 ### Push notifications
 
-1. developer.apple.com › Keys › new key with *Apple Push Notifications service*.
-2. Save `AuthKey_XXXXXXXXXX.p8` into `deploy/secrets/push/`.
-3. In `.env` set `APNS_KEY_FILE=/run/secrets/push/AuthKey_XXXXXXXXXX.p8`,
-   `APNS_KEY_ID`, `APNS_TEAM_ID` (and `APNS_SANDBOX=true` for Xcode builds).
-4. For Android, add a Firebase service-account JSON and `FCM_CREDENTIALS_FILE`.
+Open `https://your-domain/admin` › **Notifications** and upload:
+
+- **Apple:** an APNs `.p8` key (developer.apple.com › Keys) with its Key ID,
+  Team ID and the app's bundle ID. The key must belong to the team that signs
+  the app. The server checks it with Apple before saving.
+- **Android:** your Firebase project's service-account JSON.
+
+Keys are stored encrypted with the server master key. Each device reports
+whether it's a development or release build, so Xcode builds and App Store
+builds both work. Files named in `.env` (`APNS_KEY_FILE`, `FCM_CREDENTIALS_FILE`)
+still work as a fallback.
 
 Pushes carry only ciphertext for the receiving device.
 
@@ -110,6 +128,25 @@ Notifications, Time Sensitive, Associated Domains, Focus. **CarPlay** needs the
 `com.apple.developer.carplay-communication` entitlement, which Apple grants on
 request: developer.apple.com/contact/carplay. Until approved, remove that key
 from `project.yml` to build for devices.
+
+## Building the Mac app
+
+Same Xcode project: choose the **AsgardMac** scheme and run.
+
+## Building the Android app
+
+Requires JDK 17 and the Android SDK (compileSdk 37.2).
+
+```sh
+cd android
+./gradlew :app:assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:testDebugUnitTest      # crypto checked against the Go and Swift vectors
+```
+
+Push notifications use your own Firebase project: put its
+`google-services.json` in `android/app/` (it's gitignored) and upload the
+matching service-account JSON in the server's web admin › Notifications.
+Android Auto reads and replies to messages through the app's notifications.
 
 ## Development
 

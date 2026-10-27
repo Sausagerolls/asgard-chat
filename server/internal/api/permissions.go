@@ -21,16 +21,16 @@ const (
 	PermStartCalls
 	PermMentionAll
 	PermBypassSlowMode
-	PermPostStories // reserved
-	PermAll int64 = 1<<62 - 1
+	PermVoice       // join and speak in the conversation's voice room
+	PermAll   int64 = 1<<62 - 1
 )
 
 const (
-	defaultGroupPerms     = PermSend | PermSendMedia | PermAddMembers | PermPin | PermStartCalls | PermMentionAll
-	defaultChannelPerms   = 0 // subscribers react, vote and comment in threads only
-	defaultCommunityPerms = PermSend | PermSendMedia | PermStartCalls
+	defaultGroupPerms     = PermSend | PermSendMedia | PermAddMembers | PermPin | PermStartCalls | PermMentionAll | PermVoice
+	defaultChannelPerms   = PermVoice // subscribers react, vote, comment in threads and join voice
+	defaultCommunityPerms = PermSend | PermSendMedia | PermStartCalls | PermVoice
 	moderatorPerms        = PermSend | PermSendMedia | PermAddMembers | PermPin | PermDeleteOthers |
-		PermManageMembers | PermStartCalls | PermMentionAll | PermBypassSlowMode
+		PermManageMembers | PermStartCalls | PermMentionAll | PermBypassSlowMode | PermVoice
 )
 
 var roleRank = map[string]int{"subscriber": 0, "member": 1, "moderator": 2, "admin": 3, "owner": 4}

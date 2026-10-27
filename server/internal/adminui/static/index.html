@@ -30,6 +30,7 @@
       <button data-tab="users">Users</button>
       <button data-tab="invites">Invites</button>
       <button data-tab="audit">Audit log</button>
+      <button data-tab="push">Notifications</button>
       <button data-tab="settings">Settings</button>
     </nav>
     <button id="logout" class="ghost">Sign out</button>
@@ -39,7 +40,7 @@
     <div class="grid stats" id="stats"></div>
     <div class="card">
       <h2>Privacy</h2>
-      <p class="muted">Messages, media, reactions, polls and stories are end-to-end encrypted. This panel shows
+      <p class="muted">Messages, media, reactions and polls are end-to-end encrypted. This panel shows
         accounts, devices and storage use only. It cannot show message content.</p>
     </div>
   </section>
@@ -85,12 +86,53 @@
     </div>
   </section>
 
+  <section id="push" class="tab" hidden>
+    <div class="card">
+      <h2>Push notifications</h2>
+      <p class="muted">The official Asgard apps get notifications through the Asgard push relay automatically; you don't need any keys.
+        Upload your own Apple and Google keys below only if you build and sign the apps yourself (then set
+        <code>ASGARD_PUSH_RELAY=off</code>). Notifications only ever carry encrypted data; each phone decrypts its own.</p>
+      <div id="push-summary" class="row"></div>
+    </div>
+    <form class="card" id="apns-form">
+      <div class="row"><h2>Apple (iPhone, iPad, Mac)</h2><span id="apns-state"></span></div>
+      <p class="muted">developer.apple.com › Certificates, IDs &amp; Profiles › Keys › <b>+</b> › tick <i>Apple Push Notifications service (APNs)</i>.
+        Download the <code>.p8</code> file. The key must belong to the team that owns the app's bundle ID: if you use a build
+        of Asgard you signed yourself, use your own key and your own bundle ID.</p>
+      <div class="grid form">
+        <label>Key file (.p8) <input name="file" type="file" accept=".p8,text/plain"></label>
+        <label>Key ID <input name="key_id" maxlength="10" placeholder="ABCDE12345" autocomplete="off"></label>
+        <label>Team ID <input name="team_id" maxlength="10" placeholder="A1B2C3D4E5" autocomplete="off"></label>
+        <label>App bundle ID <input name="topic" placeholder="com.giantmushroom.asgardchat" autocomplete="off"></label>
+      </div>
+      <label>…or paste the key <textarea name="key" rows="4" placeholder="-----BEGIN PRIVATE KEY-----" spellcheck="false"></textarea></label>
+      <div class="row">
+        <span><button class="primary" type="submit">Check with Apple and save</button> <span class="muted" id="apns-msg"></span></span>
+        <button type="button" class="danger" id="apns-remove" hidden>Remove key</button>
+      </div>
+    </form>
+    <form class="card" id="fcm-form">
+      <div class="row"><h2>Google (Android)</h2><span id="fcm-state"></span></div>
+      <p class="muted">console.firebase.google.com › your project › Project settings › Service accounts › <i>Generate new private key</i>.
+        Use the Firebase project the Android app was built with.</p>
+      <label>Service account file (.json) <input name="file" type="file" accept=".json,application/json"></label>
+      <label>…or paste it <textarea name="credentials" rows="4" placeholder='{"type": "service_account", ...}' spellcheck="false"></textarea></label>
+      <div class="row">
+        <span><button class="primary" type="submit">Check with Google and save</button> <span class="muted" id="fcm-msg"></span></span>
+        <button type="button" class="danger" id="fcm-remove" hidden>Remove credentials</button>
+      </div>
+    </form>
+    <div class="card">
+      <div class="row"><h2>Test</h2><button type="button" id="push-test">Send a test notification to my devices</button></div>
+      <div id="push-test-result" class="muted"></div>
+    </div>
+  </section>
+
   <section id="settings" class="tab" hidden>
     <form class="card" id="settings-form">
       <h2>Server settings</h2>
       <div class="grid form">
         <label>Server name <input name="server_name"></label>
-        <label>Story lifetime (hours) <input name="story_ttl_hours" type="number" min="1" max="48"></label>
         <label>Default disappearing timer for new DMs (seconds, 0 = off) <input name="default_disappearing_seconds" type="number" min="0"></label>
         <label>Delete messages older than (days, 0 = never) <input name="message_retention_days" type="number" min="0"></label>
         <label>Default storage quota per user (MB, 0 = unlimited) <input name="default_quota_mb" type="number" min="0"></label>

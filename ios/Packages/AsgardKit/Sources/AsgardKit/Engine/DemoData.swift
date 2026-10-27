@@ -32,6 +32,11 @@ public enum DemoData {
     public static func seed(_ engine: ChatEngine) {
         let ctx = engine.context
         engine.demoSetMe(me)
+        // Drop-in voice room with people already in it.
+        let joined = Date.now.addingTimeInterval(-1200)
+        engine.voiceRooms[id(111)] = [users[0], users[2], users[5]].enumerated().map { i, u in
+            VoiceParticipant(userID: u.id, deviceID: id(900 + i), name: u.displayName, muted: i == 1, video: i == 2, joinedAt: joined.addingTimeInterval(Double(i) * 60))
+        }
         if ((try? ctx.fetchCount(FetchDescriptor<StoredConversation>())) ?? 0) > 0 { return }
         for u in users { ctx.insert(StoredUser(u)) }
         ctx.insert(StoredUser(me))

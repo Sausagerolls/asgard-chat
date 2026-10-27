@@ -97,8 +97,7 @@ struct ChatView: View {
         .fullScreenCover(item: Binding(get: { session.viewer }, set: { session.viewer = $0 })) { item in
             MediaViewer(message: item.message, startIndex: item.index)
         }
-        .translationPresentation(isPresented: Binding(get: { session.translateText != nil }, set: { if !$0 { session.translateText = nil } }),
-                                 text: session.translateText ?? "")
+        .translateSheet(session)
         .onAppear {
             engine.activeConversation = conversationID
             engine.markRead(conversationID)
@@ -117,6 +116,9 @@ struct ChatView: View {
 
     @ViewBuilder var topInsets: some View {
         VStack(spacing: 6) {
+            if conversation?.kind.hasVoiceRoom == true {
+                VoiceRoomBar(conversationID: conversationID)
+            }
             if let p = pinned.first {
                 PinnedBanner(message: p, count: pinned.count) { session.jump(to: p.id) }
             }
@@ -158,7 +160,7 @@ struct ChatView: View {
             Button { showInfo = true } label: { ChatHeader(conversationID: conversationID) }.buttonStyle(.plain)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            if let c = conversation, c.kind == .dm || c.kind == .group {
+            if let c = conversation, c.kind == .dm {
                 Button { Task { await calls.start(conversationID, video: true) } } label: { Image(systemName: "video") }
                     .accessibilityLabel("Video call")
                 Button { Task { await calls.start(conversationID, video: false) } } label: { Image(systemName: "phone") }
@@ -367,5 +369,22 @@ struct SelectionBar: View {
         .glassEffect(.regular, in: .capsule)
         .padding(.horizontal, 12).padding(.bottom, 6)
         .disabled(session.selected.isEmpty && false)
+    }
+}
+
+extension View {
+    /// System translation popover; on Mac the text is handed to the Translate app instead.
+    @ViewBuilder func translateSheet(_ session: ChatSession) -> some View {
+        #if targetEnvironment(macCatalyst)
+        onChange(of: session.translateText) { _, text in
+            guard let text, let q = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: "https://translate.google.com/?sl=auto&op=translate&text=" + q) else { return }
+            session.translateText = nil
+            UIApplication.shared.open(url)
+        }
+        #else
+        translationPresentation(isPresented: Binding(get: { session.translateText != nil }, set: { if !$0 { session.translateText = nil } }),
+                                text: session.translateText ?? "")
+        #endif
     }
 }

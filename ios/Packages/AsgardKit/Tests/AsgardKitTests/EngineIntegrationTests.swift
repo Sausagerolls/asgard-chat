@@ -86,3 +86,74 @@ import Testing
         await thor2.signOut()
     }
 }
+
+@MainActor
+@Suite(.serialized) struct HistorySyncTests {
+    let server = ProcessInfo.processInfo.environment["ASGARD_TEST_SERVER"].flatMap(URL.init(string:))
+    let invite = ProcessInfo.processInfo.environment["ASGARD_TEST_INVITE"]
+
+    func makeEngine() throws -> ChatEngine {
+        let e = ChatEngine(container: try LocalStore.container(inMemory: true))
+        e.accountStore = .memory()
+        return e
+    }
+
+    func texts(_ e: ChatEngine, _ conv: UUID) -> [String] {
+        ((try? e.context.fetch(FetchDescriptor<StoredMessage>(predicate: #Predicate { $0.conversationID == conv }, sortBy: [SortDescriptor(\.sortKey)]))) ?? [])
+            .compactMap { $0.content?.text }
+    }
+
+    func waitFor(_ what: String, timeout: Double = 10, _ cond: () -> Bool) async throws {
+        let deadline = Date.now.addingTimeInterval(timeout)
+        while !cond() {
+            if Date.now > deadline { Issue.record("timed out waiting for \(what)"); return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    @Test func recoveryKeyFormat() throws {
+        let k = RecoveryKey.generate()
+        #expect(k.formatted.split(separator: "-").count == 13)
+        #expect(RecoveryKey(k.formatted) == k)
+        #expect(RecoveryKey(k.formatted.lowercased().replacingOccurrences(of: "-", with: " ")) == k)
+        #expect(RecoveryKey("not a key") == nil)
+        #expect(k.deviceKeys.identityPublic == RecoveryKey(bytes: k.bytes).deviceKeys.identityPublic)
+    }
+
+    @Test func newDevicesSeeHistory() async throws {
+        guard let server, let invite else { return }
+        let suffix = String(UUID().uuidString.prefix(6)).lowercased()
+        let odin = try makeEngine(), thor = try makeEngine()
+        try await odin.signUp(server: server, invite: invite, username: "odin\(suffix)", displayName: "Odin", password: "valhalla-rising-1", deviceName: "phone")
+        try await thor.signUp(server: server, invite: invite, username: "thor\(suffix)", displayName: "Thor", password: "mjolnir-hammer-1", deviceName: "phone")
+        let dm = try await odin.openDM(with: thor.myID!)
+
+        // Sent before history sync existed: covered by backfill.
+        await thor.send(.text("Before the key"), to: dm)
+        try await waitFor("odin gets first") { texts(odin, dm).contains("Before the key") }
+
+        let shown = try await odin.enableHistory()
+        try await waitFor("backfill") { !odin.history.working && odin.history.progress == nil }
+        try await Task.sleep(for: .seconds(1))
+        await thor.send(.text("After the key"), to: dm)
+        try await waitFor("odin gets second") { texts(odin, dm).contains("After the key") }
+
+        // Lost every device: sign in fresh and type the recovery key.
+        let fresh = try makeEngine()
+        try await fresh.signIn(server: server, username: "odin\(suffix)", password: "valhalla-rising-1", deviceName: "new phone")
+        await fresh.refreshConversations()
+        await #expect(throws: APIError.self) { try await fresh.restoreHistory(RecoveryKey.generate().formatted) }
+        try await fresh.restoreHistory(shown)
+        #expect(texts(fresh, dm).contains("Before the key"))
+        #expect(texts(fresh, dm).contains("After the key"))
+
+        // Linking a device hands it the key automatically.
+        struct Link: Decodable { var code: String }
+        let link: Link = try await odin.api!.send("POST", "/devices/link")
+        let linked = try makeEngine()
+        try await linked.claimDeviceLink(server: server, code: link.code, deviceName: "mac")
+        await linked.refreshConversations()
+        try await waitFor("linked device restores", timeout: 20) { texts(linked, dm).contains("Before the key") && texts(linked, dm).contains("After the key") }
+        #expect(linked.history.hasKey)
+    }
+}

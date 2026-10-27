@@ -59,6 +59,35 @@ public enum Keychain {
 
     public static func delete() {
         SecItemDelete(baseQuery() as CFDictionary)
+        deleteSecret("history")
+    }
+
+    // Extra secrets (the history recovery key) stored next to the account.
+    static func secretQuery(_ name: String) -> [String: Any] {
+        var q = baseQuery()
+        q[kSecAttrAccount as String] = name
+        return q
+    }
+
+    public static func loadSecret(_ name: String) -> Data? {
+        var q = secretQuery(name)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess else { return nil }
+        return out as? Data
+    }
+
+    public static func saveSecret(_ data: Data, name: String) {
+        SecItemDelete(secretQuery(name) as CFDictionary)
+        var q = secretQuery(name)
+        q[kSecValueData as String] = data
+        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(q as CFDictionary, nil)
+    }
+
+    public static func deleteSecret(_ name: String) {
+        SecItemDelete(secretQuery(name) as CFDictionary)
     }
 }
 
@@ -67,12 +96,16 @@ public struct AccountStore: Sendable {
     public var load: @Sendable () -> Keychain.Account?
     public var save: @Sendable (Keychain.Account) throws -> Void
     public var delete: @Sendable () -> Void
+    public var loadSecret: @Sendable (String) -> Data? = Keychain.loadSecret
+    public var saveSecret: @Sendable (Data, String) -> Void = { Keychain.saveSecret($0, name: $1) }
+    public var deleteSecret: @Sendable (String) -> Void = Keychain.deleteSecret
 
     public static let keychain = AccountStore(load: Keychain.load, save: Keychain.save, delete: Keychain.delete)
 
     public static func memory() -> AccountStore {
-        final class Box: @unchecked Sendable { var account: Keychain.Account? }
+        final class Box: @unchecked Sendable { var account: Keychain.Account?; var secrets: [String: Data] = [:] }
         let box = Box()
-        return AccountStore(load: { box.account }, save: { box.account = $0 }, delete: { box.account = nil })
+        return AccountStore(load: { box.account }, save: { box.account = $0 }, delete: { box.account = nil; box.secrets = [:] },
+                            loadSecret: { box.secrets[$0] }, saveSecret: { box.secrets[$1] = $0 }, deleteSecret: { box.secrets[$0] = nil })
     }
 }

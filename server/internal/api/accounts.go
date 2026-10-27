@@ -409,15 +409,19 @@ func (s *Server) setPushToken(w http.ResponseWriter, r *http.Request) error {
 		Kind      string `json:"kind"` // apns | fcm | ""
 		Token     string `json:"token"`
 		VoIPToken string `json:"voip_token"`
+		Env       string `json:"env"` // development | production
 	}
 	if err := decode(r, &in); err != nil {
 		return err
 	}
-	if in.Kind != "apns" && in.Kind != "fcm" && in.Kind != "" {
-		return badRequest("kind must be apns or fcm")
+	if in.Kind != "apns" && in.Kind != "fcm" && in.Kind != "relay" && in.Kind != "" {
+		return badRequest("kind must be apns, fcm or relay")
 	}
-	_, err := s.db.Exec(r.Context(), `UPDATE devices SET push_kind = $2, push_token = $3, voip_token = $4 WHERE id = $1`,
-		me(r).DeviceID, in.Kind, in.Token, in.VoIPToken)
+	if in.Env != "development" && in.Env != "production" {
+		in.Env = ""
+	}
+	_, err := s.db.Exec(r.Context(), `UPDATE devices SET push_kind = $2, push_token = $3, voip_token = $4, push_env = $5 WHERE id = $1`,
+		me(r).DeviceID, in.Kind, in.Token, in.VoIPToken, in.Env)
 	if err != nil {
 		return err
 	}
@@ -439,7 +443,7 @@ type Device struct {
 
 func (s *Server) listMyDevices(w http.ResponseWriter, r *http.Request) error {
 	p := me(r)
-	rows, err := s.db.Query(r.Context(), `SELECT id, user_id, name, platform, identity_key, signing_key, created_at, last_active_at FROM devices WHERE user_id = $1 ORDER BY created_at`, p.UserID)
+	rows, err := s.db.Query(r.Context(), `SELECT id, user_id, name, platform, identity_key, signing_key, created_at, last_active_at FROM devices WHERE user_id = $1 AND platform <> 'history' ORDER BY created_at`, p.UserID)
 	if err != nil {
 		return err
 	}

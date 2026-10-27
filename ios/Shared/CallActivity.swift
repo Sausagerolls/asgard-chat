@@ -1,3 +1,4 @@
+#if !targetEnvironment(macCatalyst)
 import ActivityKit
 import Foundation
 
@@ -12,3 +13,4 @@ nonisolated struct CallActivityAttributes: ActivityAttributes {
     var conversationID: String
     var title: String
 }
+#endif

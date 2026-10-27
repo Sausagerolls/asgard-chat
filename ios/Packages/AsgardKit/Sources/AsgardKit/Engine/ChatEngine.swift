@@ -35,9 +35,14 @@ public final class ChatEngine {
     public private(set) var deliveredMarks: [UUID: [UUID: Int64]] = [:]
     public private(set) var presence: [UUID: (online: Bool, lastSeen: Date?)] = [:]
     public var incomingCall: IncomingCall?
+    /// Who is in each conversation's voice room (only occupied rooms are listed).
+    public internal(set) var voiceRooms: [UUID: [VoiceParticipant]] = [:]
+    /// The conversation whose voice room this device is in.
+    public var currentVoiceRoom: UUID?
+    /// Message history sync and recovery (see HistorySync.swift).
+    public internal(set) var history = HistoryState()
     public var activeConversation: UUID?
     public var banner: String?
-    public private(set) var storyRevision = 0
     public private(set) var isDemo: Bool
 
     public let container: ModelContainer
@@ -56,6 +61,9 @@ public final class ChatEngine {
     public var onIncomingCall: ((IncomingCall) -> Void)?
     public var onCallEnded: ((UUID) -> Void)?
     public var onDeviceLinked: ((String) -> Void)?
+    /// A new message from someone else arrived over the live connection
+    /// (desktop apps raise their own notifications from this).
+    public var onIncomingMessage: ((StoredMessage) -> Void)?
 
     var cursorKey: String { "syncCursor-" + (account?.deviceID.lower ?? "none") }
     var cursor: Int64 {
@@ -93,7 +101,13 @@ public final class ChatEngine {
         me = user ?? cachedUser(account.userID)
         phase = .ready
         connectRealtime()
-        tasks.append(Task { await self.refreshAll() })
+        tasks.append(Task {
+            await self.refreshAll()
+            await self.repairRecentHistory()
+            await self.refreshHistoryStatus()
+            if self.history.hasKey { await self.importHistory(); await self.backfillHistory() }
+        })
+        tasks.append(Task { await self.refreshVoiceRooms() })
         tasks.append(Task { await self.expiryLoop() })
     }
 
@@ -132,7 +146,7 @@ public final class ChatEngine {
                 guard let self else { return }
                 let wasOffline = self.connection != .connected
                 self.connection = s
-                if s == .connected && wasOffline { Task { await self.syncNow() } }
+                if s == .connected && wasOffline { Task { await self.syncNow(); await self.refreshVoiceRooms() } }
             }
         })
         rt.start()
@@ -514,6 +528,22 @@ public final class ChatEngine {
         try? context.save()
     }
 
+    /// Re-reads recent history for every chat. Used once after a build that
+    /// dropped incoming messages: anything already stored is left as is.
+    public func repairRecentHistory() async {
+        guard let api, !isDemo, let device = myDeviceID else { return }
+        let flag = "historyRepair-v1-" + device.lower
+        guard !AppGroup.defaults.bool(forKey: flag) else { return }
+        let convs = (try? context.fetch(FetchDescriptor<StoredConversation>())) ?? []
+        for c in convs where c.kind != .community {
+            guard let envs = try? await api.history(c.id, before: nil, limit: 100) else { continue }
+            await prefetchSigningKeys(envs)
+            for env in envs.reversed() { process(env, live: false, countUnread: true) }
+        }
+        try? context.save()
+        AppGroup.defaults.set(true, forKey: flag)
+    }
+
     func prefetchSigningKeys(_ envs: [Envelope]) async {
         guard let api else { return }
         let missing = Set(envs.compactMap { e -> UUID? in
@@ -590,20 +620,22 @@ public final class ChatEngine {
                 if incomingCall?.conversationID == e.conversation_id { incomingCall = nil }
                 onCallEnded?(e.conversation_id)
             }
-        case "story", "story.viewed":
-            storyRevision += 1
+        case "voice.state":
+            if let st = ev.decode(VoiceRoomState.self) { voiceRooms[st.conversationID] = st.participants.isEmpty ? nil : st.participants }
         case "device.linked":
             struct L: Decodable { var name: String }
             if let l = ev.decode(L.self) { onDeviceLinked?(l.name) }
+            Task { await shareHistoryKey() }
         default:
             break
         }
     }
 
     /// Applies one envelope to the local store.
-    public func process(_ env: Envelope, live: Bool, countUnread: Bool = true) {
-        if let c = env.cursor, !live { cursor = max(cursor, c) }
-        guard let keys else { return }
+    /// `openWith` opens with other keys (the history device's) instead of this device's.
+    public func process(_ env: Envelope, live: Bool, countUnread: Bool = true, openWith: DeviceKeys? = nil) {
+        if let c = env.cursor, !live, openWith == nil { cursor = max(cursor, c) }
+        guard let keys = openWith ?? keys else { return }
         let fromMe = env.senderUserID == myID
         switch EnvelopeOpener(keys: keys).open(env, signingKey: env.senderDeviceID.flatMap(SigningKeyCache.get)) {
         case .system(let sys):
@@ -615,7 +647,7 @@ public final class ChatEngine {
             touchPreview(env.conversationID, text: SystemText.describe(sys, name: name), sender: nil, at: env.sentAt)
             if live { Task { await refreshConversation(env.conversationID) } }
         case .undecryptable:
-            guard env.kind == "msg" else { return }
+            guard env.kind == "msg", openWith == nil else { return }
             if let row = existing(env.id) {
                 if env.deleted { applyDelete(row) }
                 return
@@ -635,6 +667,8 @@ public final class ChatEngine {
     func apply(_ env: Envelope, content: MessageContent, verified: Bool, live: Bool, countUnread: Bool) {
         let fromMe = env.senderUserID == myID
         switch env.kind {
+        case "control":
+            handleControl(env, content: content, live: live)
         case "msg":
             if content.type == .callKey { CallKeyStore.shared.put(room: content.callKey?.room, key: content.callKey?.key); return }
             let row: StoredMessage
@@ -654,8 +688,10 @@ public final class ChatEngine {
                    let sc = storedConversation(env.conversationID), live || env.seq > (sc.conversation?.me?.readSeq ?? 0) {
                     sc.unread += 1
                 }
+                if !fromMe, live, content.silent != true { onIncomingMessage?(row) }
             }
             row.content = content
+            row.decryptFailed = false
             row.unverified = !verified
             row.expiresAt = env.expiresAt
             row.viewOnce = env.viewOnce || content.attachments?.contains { $0.viewOnce == true } == true
@@ -1107,7 +1143,7 @@ public final class ChatEngine {
             CallKeyStore.shared.put(room: join.room, key: key)
             var c = MessageContent(type: .callKey)
             c.callKey = .init(room: join.room, key: key)
-            _ = try? await deliver(c, kind: "msg", to: conv)
+            _ = try? await deliver(c, kind: "control", to: conv)
         }
         return join
     }
@@ -1124,14 +1160,46 @@ public final class ChatEngine {
 
     // MARK: - Push
 
+    /// APNs environment of this build: Xcode builds use the sandbox.
+    nonisolated public static var pushEnvironment: String {
+        #if DEBUG
+        "development"
+        #else
+        "production"
+        #endif
+    }
+
     public func registerPush(token: Data?, voipToken: Data?) async {
         guard let api else { return }
-        struct Body: Encodable, Sendable { var kind: String; var token: String; var voip_token: String }
+        struct Body: Encodable, Sendable { var kind: String; var token: String; var voip_token: String; var env: String }
         let hex = { (d: Data?) in d?.map { String(format: "%02x", $0) }.joined() ?? "" }
         if let token { AppGroup.defaults.set(hex(token), forKey: "apnsToken") }
         if let voipToken { AppGroup.defaults.set(hex(voipToken), forKey: "voipToken") }
-        try? await api.call("PUT", "/me/push", body: Body(kind: "apns", token: AppGroup.defaults.string(forKey: "apnsToken") ?? "",
-                                                          voip_token: AppGroup.defaults.string(forKey: "voipToken") ?? ""))
+        let apns = AppGroup.defaults.string(forKey: "apnsToken") ?? "", voip = AppGroup.defaults.string(forKey: "voipToken") ?? ""
+        if serverInfo == nil { serverInfo = try? await api.info() }
+        // Servers that use the Asgard push relay only ever get opaque handles, never device tokens.
+        if let relay = serverInfo?.pushRelay, let url = URL(string: relay.url) {
+            let handle = await relayHandle(url, server: relay.serverID, token: apns)
+            let voipHandle = await relayHandle(url, server: relay.serverID, token: voip)
+            if handle != nil || voipHandle != nil {
+                try? await api.call("PUT", "/me/push", body: Body(kind: "relay", token: handle ?? "", voip_token: voipHandle ?? "", env: Self.pushEnvironment))
+                return
+            }
+        }
+        try? await api.call("PUT", "/me/push", body: Body(kind: "apns", token: apns, voip_token: voip, env: Self.pushEnvironment))
+    }
+
+    /// Exchanges an APNs token for a relay handle bound to this server.
+    func relayHandle(_ relay: URL, server: String, token: String) async -> String? {
+        guard !token.isEmpty else { return nil }
+        struct Body: Encodable, Sendable { var server_id: String; var platform = "apns"; var token: String; var env: String }
+        struct Out: Decodable, Sendable { var handle: String }
+        var req = URLRequest(url: relay.appending(path: "v1/devices"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONEncoder().encode(Body(server_id: server, token: token, env: Self.pushEnvironment))
+        guard let (data, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 201 else { return nil }
+        return (try? JSONDecoder().decode(Out.self, from: data))?.handle
     }
 
     // MARK: - Maintenance

@@ -1,0 +1,13 @@
+{
+  "recipient_identity_private": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+  "sender_signing_seed": "ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=",
+  "sender_signing_public": "C7w0aldmfDgBIL2cf9flHSxf3+o3zS9b9AWyxr9vLXg=",
+  "recipient_identity_public": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9/AsrhtHHw=",
+  "conversation_id": "6f1f5a4e-2b1c-4c8e-9a51-0c9b1b8f7a10",
+  "sender_device_id": "0b7e2d3c-11aa-4f00-8c2d-5e6f7a8b9c0d",
+  "client_id": "c1a2b3c4-d5e6-4f70-8a9b-0c1d2e3f4a5b",
+  "plaintext": "{\"v\":1,\"type\":\"text\",\"text\":\"Hail from Go\"}",
+  "ciphertext": "dAw6DimghUwzzWbGy0vaitmi8PtceNHCtCmXHe/5nVUj8hREyIUSp7WZeGsKf1X+Uj4rBDjAWBD4YbdsJ4AvL6+oAiDqv94=",
+  "signature": "UgDJJaLtS7ibUQ7G583bOfikhJtjEDOaYxLOaIJLeoiY57cFpBvNTHzcqWgVH2noxkRafspN38gKHfnbHTOWDQ==",
+  "wrapped_key": "MYQ5/oCZBdp8MNdm6SdrEC6nA7Jwrroqa0ErwmO0JWn+4sXQ1YF4ZMPPDrdyIDlft9cvlC4fPR3vkUITWwnW5QZoekwResAqMnlF5s7LgkN3eMiHbnCeHkxIEzA="
+}

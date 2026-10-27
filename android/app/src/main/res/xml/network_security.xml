@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HTTPS everywhere, except plain HTTP is allowed so you can test against a
+     server on your home network (e.g. http://192.168.1.10:8080). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>

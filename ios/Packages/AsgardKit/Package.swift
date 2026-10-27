@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "AsgardKit",
-    platforms: [.iOS(.v26), .macOS(.v26), .watchOS(.v26)],
+    platforms: [.iOS(.v26), .macOS(.v26), .macCatalyst(.v26), .watchOS(.v26)],
     products: [
         .library(name: "AsgardKit", targets: ["AsgardKit"]),
     ],

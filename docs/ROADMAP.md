@@ -3,13 +3,20 @@
 ## Phase 1 — Server + iOS (done)
 - [x] Go server, Docker Compose stack, backups, admin panel, CLI
 - [x] v1 E2EE protocol with Go/Swift cross-implementation test vectors
-- [x] iOS app: chats, groups, channels, communities, stories, calls, settings, admin
+- [x] iOS app: chats, groups, channels, communities, voice rooms, calls, settings, admin
 - [x] CarPlay, Siri, App Intents, Focus filter, widgets, Live Activity, Control
 - [x] Notification service extension (on-device decryption), share extension
 - [x] On-device Apple Intelligence summaries and smart replies
 - [ ] Verify on physical devices: push, VoIP, CarPlay (needs entitlement)
 
-## Phase 2 — Android (Kotlin, Jetpack Compose, Material 3 Expressive)
+## Done since phase 1
+- [x] Voice rooms in groups and channels; stories removed
+- [x] Push credentials uploaded through the web admin
+- [x] Message history sync with recovery key (QR), automatic on device link
+- [x] Native macOS app
+- [x] Android app: chats, voice rooms, calls, history sync, notifications, Android Auto
+
+## Phase 2 — Android polish
 - [ ] Shared protocol port (Tink/BouncyCastle X25519, Ed25519, ChaCha20-Poly1305) checked against `go_vector.json`
 - [ ] Room database, WorkManager sync, FCM data messages
 - [ ] MessagingStyle notifications with direct reply (Android Auto reads/replies through these)

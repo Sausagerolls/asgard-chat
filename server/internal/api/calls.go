@@ -84,31 +84,37 @@ func (s *Server) ring(conv uuid.UUID, caller *principal, callerName string, vide
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	ev := map[string]any{"conversation_id": conv, "caller_id": caller.UserID, "caller_name": callerName, "video": video, "call_id": uuid.New()}
-	rows, err := s.db.Query(ctx, `SELECT d.id, d.push_kind, d.push_token, d.voip_token FROM devices d
+	rows, err := s.db.Query(ctx, `SELECT d.id, d.push_kind, d.push_token, d.voip_token, d.push_env FROM devices d
 		JOIN members m ON m.user_id = d.user_id
 		WHERE m.conversation_id = $1 AND d.user_id <> $2 AND (m.muted_until IS NULL OR m.muted_until < now())`, conv, caller.UserID)
 	if err != nil {
 		return
 	}
 	type target struct {
-		id                 uuid.UUID
-		kind, token, voip string
+		id                     uuid.UUID
+		kind, token, voip, env string
 	}
 	targets, _ := pgx.CollectRows(rows, func(row pgx.CollectableRow) (target, error) {
 		var t target
-		return t, row.Scan(&t.id, &t.kind, &t.token, &t.voip)
+		return t, row.Scan(&t.id, &t.kind, &t.token, &t.voip, &t.env)
 	})
 	for _, t := range targets {
 		s.hub.ToDevice(t.id, realtime.Event{Type: "call.ring", Data: ev})
-		if s.push == nil {
+		if !s.push.Any() {
 			continue
 		}
 		// iOS must receive a VoIP push to report to CallKit even when connected.
 		switch {
 		case t.kind == "apns" && t.voip != "":
-			s.push.Send(ctx, "apns", t.voip, push.Notification{Kind: push.VoIP, Data: ev})
+			s.push.Send(ctx, "apns", t.voip, t.env, push.Notification{Kind: push.VoIP, Data: ev})
+		case t.kind == "relay" && t.voip != "":
+			// iPhone: the VoIP token's relay handle rings CallKit.
+			s.push.Send(ctx, "relay", t.voip, "", push.Notification{Kind: push.VoIP, Data: ev})
+		case t.kind == "relay" && !s.hub.DeviceOnline(t.id):
+			// Android: a high-priority data message wakes the app to ring.
+			s.push.Send(ctx, "relay", t.token, "", push.Notification{Kind: push.VoIP, Data: ev, Collapse: "call-" + conv.String()})
 		case t.kind == "fcm" && !s.hub.DeviceOnline(t.id):
-			s.push.Send(ctx, "fcm", t.token, push.Notification{Kind: push.VoIP, Data: ev, Collapse: "call-" + conv.String()})
+			s.push.Send(ctx, "fcm", t.token, "", push.Notification{Kind: push.VoIP, Data: ev, Collapse: "call-" + conv.String()})
 		}
 	}
 }

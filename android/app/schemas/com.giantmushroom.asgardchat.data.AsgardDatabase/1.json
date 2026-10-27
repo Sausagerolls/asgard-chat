@@ -1,0 +1,450 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "802e9a13b191eae32f7dca23a605cd15",
+    "entities": [
+      {
+        "tableName": "conversations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `payload` TEXT NOT NULL, `kind` TEXT NOT NULL, `title` TEXT NOT NULL, `sortDate` INTEGER NOT NULL, `pinned` INTEGER NOT NULL, `archived` INTEGER NOT NULL, `unread` INTEGER NOT NULL, `folder` TEXT NOT NULL, `mutedUntil` INTEGER, `previewText` TEXT NOT NULL, `previewSenderID` TEXT, `previewDate` INTEGER, `draft` TEXT NOT NULL, `communityID` TEXT, `markedUnread` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortDate",
+            "columnName": "sortDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archived",
+            "columnName": "archived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unread",
+            "columnName": "unread",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "folder",
+            "columnName": "folder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mutedUntil",
+            "columnName": "mutedUntil",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "previewText",
+            "columnName": "previewText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previewSenderID",
+            "columnName": "previewSenderID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "previewDate",
+            "columnName": "previewDate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "draft",
+            "columnName": "draft",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "communityID",
+            "columnName": "communityID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "markedUnread",
+            "columnName": "markedUnread",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `clientID` TEXT NOT NULL, `conversationID` TEXT NOT NULL, `seq` INTEGER NOT NULL, `sortKey` REAL NOT NULL, `senderUserID` TEXT, `senderDeviceID` TEXT, `sentAt` INTEGER NOT NULL, `expiresAt` INTEGER, `status` TEXT NOT NULL, `contentJson` TEXT, `systemJson` TEXT, `threadRootID` TEXT, `replyCount` INTEGER NOT NULL, `wasDeleted` INTEGER NOT NULL, `editedAt` INTEGER, `reactionsJson` TEXT, `votesJson` TEXT, `rsvpJson` TEXT, `isPinned` INTEGER NOT NULL, `isStarred` INTEGER NOT NULL, `decryptFailed` INTEGER NOT NULL, `unverified` INTEGER NOT NULL, `viewOnce` INTEGER NOT NULL, `searchText` TEXT NOT NULL, `error` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientID",
+            "columnName": "clientID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationID",
+            "columnName": "conversationID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortKey",
+            "columnName": "sortKey",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderUserID",
+            "columnName": "senderUserID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "senderDeviceID",
+            "columnName": "senderDeviceID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sentAt",
+            "columnName": "sentAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expiresAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentJson",
+            "columnName": "contentJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "systemJson",
+            "columnName": "systemJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "threadRootID",
+            "columnName": "threadRootID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyCount",
+            "columnName": "replyCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wasDeleted",
+            "columnName": "wasDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editedAt",
+            "columnName": "editedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reactionsJson",
+            "columnName": "reactionsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "votesJson",
+            "columnName": "votesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rsvpJson",
+            "columnName": "rsvpJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isPinned",
+            "columnName": "isPinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isStarred",
+            "columnName": "isStarred",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "decryptFailed",
+            "columnName": "decryptFailed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unverified",
+            "columnName": "unverified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "viewOnce",
+            "columnName": "viewOnce",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "searchText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "error",
+            "columnName": "error",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_messages_conversationID",
+            "unique": false,
+            "columnNames": [
+              "conversationID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_messages_conversationID` ON `${TABLE_NAME}` (`conversationID`)"
+          },
+          {
+            "name": "index_messages_clientID",
+            "unique": false,
+            "columnNames": [
+              "clientID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_messages_clientID` ON `${TABLE_NAME}` (`clientID`)"
+          },
+          {
+            "name": "index_messages_sortKey",
+            "unique": false,
+            "columnNames": [
+              "sortKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_messages_sortKey` ON `${TABLE_NAME}` (`sortKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "users",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `payload` TEXT NOT NULL, `displayName` TEXT NOT NULL, `username` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "pending_ops",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `targetID` TEXT NOT NULL, `kind` TEXT NOT NULL, `senderUserID` TEXT, `contentJson` TEXT, `sentAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetID",
+            "columnName": "targetID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "senderUserID",
+            "columnName": "senderUserID",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentJson",
+            "columnName": "contentJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sentAt",
+            "columnName": "sentAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_ops_targetID",
+            "unique": false,
+            "columnNames": [
+              "targetID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_ops_targetID` ON `${TABLE_NAME}` (`targetID`)"
+          }
+        ]
+      },
+      {
+        "tableName": "calls",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationID` TEXT NOT NULL, `startedAt` INTEGER NOT NULL, `duration` INTEGER NOT NULL, `video` INTEGER NOT NULL, `outgoing` INTEGER NOT NULL, `missed` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationID",
+            "columnName": "conversationID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "duration",
+            "columnName": "duration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "video",
+            "columnName": "video",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outgoing",
+            "columnName": "outgoing",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "missed",
+            "columnName": "missed",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '802e9a13b191eae32f7dca23a605cd15')"
+    ]
+  }
+}

@@ -62,6 +62,7 @@ struct ChatListView: View {
     @State private var search = ""
     @State private var searchResults: [StoredMessage] = []
     @State private var showNewChat = false
+    @State private var showHistory = false
     @AppStorage("customFolders") private var customFoldersRaw = ""
 
     var customFolders: [String] { customFoldersRaw.split(separator: "|").map(String.init) }
@@ -79,8 +80,8 @@ struct ChatListView: View {
     var body: some View {
         List {
             if search.isEmpty {
-                StoriesStrip()
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                HistoryNudge { showHistory = true }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 FolderBar(selection: $folder, custom: customFolders)
@@ -166,6 +167,7 @@ struct ChatListView: View {
                     .accessibilityLabel("New chat")
             }
         }
+        .sheet(isPresented: $showHistory) { NavigationStack { HistorySettingsView(showsDone: true) } }
         .sheet(isPresented: $showNewChat) {
             NewChatSheet { id in
                 showNewChat = false
@@ -251,6 +253,7 @@ struct ChatRow: View {
                     if conversation.isMuted { Image(systemName: "bell.slash.fill").font(.caption2).foregroundStyle(.secondary) }
                     if (conversation.conversation?.disappearingSeconds ?? 0) > 0 { Image(systemName: "timer").font(.caption2).foregroundStyle(.secondary) }
                     Spacer(minLength: 4)
+                    if case let n = engine.voiceParticipants(conversation.id).count, n > 0 { VoiceRoomBadge(count: n) }
                     if let d = conversation.previewDate ?? Optional(conversation.sortDate) {
                         Text(d.chatListStamp).font(.caption).foregroundStyle(conversation.unread > 0 && !conversation.isMuted ? Color.accentColor : .secondary)
                     }

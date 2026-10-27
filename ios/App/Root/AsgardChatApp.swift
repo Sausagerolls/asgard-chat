@@ -64,11 +64,11 @@ final class AppServices {
         await engine.start()
         if engine.phase == .ready && !engine.isDemo { PushRegistrar.shared.register() }
         Notifications.registerCategories()
-        // UI testing / screenshots: -openChat <uuid>, -tab <stories|calls|settings>
+        // UI testing / screenshots: -openChat <uuid>, -tab <calls|settings>
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-openChat"), i + 1 < args.count { router.openConversation = UUID(uuidString: args[i + 1]) }
         if let i = args.firstIndex(of: "-tab"), i + 1 < args.count {
-            router.selectedTab = ["stories": .stories, "calls": .calls, "settings": .settings][args[i + 1]] ?? .chats
+            router.selectedTab = ["calls": .calls, "settings": .settings][args[i + 1]] ?? .chats
         }
     }
 
@@ -130,4 +130,4 @@ final class Router {
     }
 }
 
-enum AppTab: Hashable { case chats, stories, calls, settings, search }
+enum AppTab: Hashable { case chats, calls, settings, search }

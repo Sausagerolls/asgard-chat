@@ -1,6 +1,8 @@
 import AsgardKit
 import SwiftUI
+#if !targetEnvironment(macCatalyst)
 import VisionKit
+#endif
 
 /// Scans the QR code shown on an existing device (Settings > Devices > Link a device).
 struct LinkDeviceScanView: View {
@@ -13,6 +15,9 @@ struct LinkDeviceScanView: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            #if targetEnvironment(macCatalyst)
+            ContentUnavailableView("Enter the code", systemImage: "qrcode", description: Text("Type the code shown under the QR code on your other device."))
+            #else
             if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                 QRScanner { payload in handle(payload) }
                     .clipShape(.rect(cornerRadius: 28))
@@ -21,6 +26,7 @@ struct LinkDeviceScanView: View {
             } else {
                 ContentUnavailableView("Camera unavailable", systemImage: "camera", description: Text("Type the code shown on your other device."))
             }
+            #endif
             Text("On your other device, open Settings › Devices › Link a device and point this camera at the code.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
             HStack {
@@ -67,6 +73,7 @@ struct LinkDeviceScanView: View {
     }
 }
 
+#if !targetEnvironment(macCatalyst)
 struct QRScanner: UIViewControllerRepresentable {
     var onCode: (String) -> Void
 
@@ -90,3 +97,4 @@ struct QRScanner: UIViewControllerRepresentable {
         }
     }
 }
+#endif

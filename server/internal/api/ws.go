@@ -91,8 +91,8 @@ func (s *Server) handleFrame(ctx context.Context, p *principal, c *realtime.Clie
 		}
 	case "typing":
 		var in struct {
-			ConversationID uuid.UUID `json:"conversation_id"`
-			State          string    `json:"state"` // typing | recording | uploading | stopped
+			ConversationID uuid.UUID  `json:"conversation_id"`
+			State          string     `json:"state"` // typing | recording | uploading | stopped
 			ThreadRootID   *uuid.UUID `json:"thread_root_id"`
 		}
 		if json.Unmarshal(f.Data, &in) != nil {

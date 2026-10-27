@@ -5,19 +5,19 @@ import SwiftUI
 @MainActor
 final class AvatarLoader {
     static let shared = AvatarLoader()
-    private let cache = NSCache<NSUUID, UIImage>()
-    private var inFlight: [UUID: Task<UIImage?, Never>] = [:]
+    private let cache = NSCache<NSUUID, PlatformImage>()
+    private var inFlight: [UUID: Task<PlatformImage?, Never>] = [:]
 
-    func cached(_ id: UUID) -> UIImage? { cache.object(forKey: id as NSUUID) }
+    func cached(_ id: UUID) -> PlatformImage? { cache.object(forKey: id as NSUUID) }
 
-    func load(_ id: UUID, api: APIClient?) async -> UIImage? {
+    func load(_ id: UUID, api: APIClient?) async -> PlatformImage? {
         if let img = cached(id) { return img }
         if let t = inFlight[id] { return await t.value }
         guard let api else { return nil }
-        let task = Task<UIImage?, Never> {
+        let task = Task<PlatformImage?, Never> {
             let file = AppGroup.mediaCacheURL.appending(path: "avatar-" + id.lower)
-            if let d = try? Data(contentsOf: file), let img = UIImage(data: d) { return img }
-            guard let d = try? await api.download(id), let img = UIImage(data: d) else { return nil }
+            if let d = try? Data(contentsOf: file), let img = PlatformImage(data: d) { return img }
+            guard let d = try? await api.download(id), let img = PlatformImage(data: d) else { return nil }
             try? d.write(to: file)
             return img
         }
@@ -36,30 +36,19 @@ struct AvatarView: View {
     var size: CGFloat = 44
     var kind: ConversationKind? = nil
     var online = false
-    var storyRing: StoryRing = .none
-
-    enum StoryRing { case none, unseen, seen }
 
     @Environment(ChatEngine.self) private var engine
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             content
                 .frame(width: size, height: size)
                 .clipShape(shape)
-                .padding(storyRing == .none ? 0 : size * 0.07)
-                .overlay {
-                    switch storyRing {
-                    case .none: EmptyView()
-                    case .unseen: shape.strokeBorder(Brand.bifrost, lineWidth: max(2, size * 0.05))
-                    case .seen: shape.strokeBorder(.secondary.opacity(0.5), lineWidth: max(1.5, size * 0.03))
-                    }
-                }
             if online {
                 Circle().fill(Brand.teal)
                     .frame(width: size * 0.26, height: size * 0.26)
-                    .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: size * 0.05))
+                    .overlay(Circle().stroke(Color.platformBackground, lineWidth: size * 0.05))
                     .offset(x: -size * 0.02, y: -size * 0.02)
             }
         }
@@ -77,7 +66,7 @@ struct AvatarView: View {
 
     @ViewBuilder private var content: some View {
         if let image {
-            Image(uiImage: image).resizable().scaledToFill()
+            Image(platformImage: image).resizable().scaledToFill()
         } else if kind == .saved {
             ZStack {
                 Brand.aurora

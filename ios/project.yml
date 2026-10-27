@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.giantmushroom
   deploymentTarget:
     iOS: "26.1"
+    macOS: "26.0"
   createIntermediateGroups: true
   groupSortPosition: top
 configFiles:
@@ -24,6 +25,7 @@ targets:
     sources:
       - path: App
       - path: Shared
+      - path: SharedUI
     dependencies:
       - package: AsgardKit
       - package: LiveKit
@@ -40,8 +42,8 @@ targets:
         com.apple.developer.siri: true
         com.apple.developer.usernotifications.communication: true
         com.apple.developer.usernotifications.time-sensitive: true
-        com.apple.developer.carplay-communication: true
-        com.apple.developer.focus-status: true
+        # Needs "CarPlay Communication" (not Audio) on the App ID; uncomment once Apple assigns it:
+        # com.apple.developer.carplay-communication: true
     info:
       path: App/Info.plist
       properties:
@@ -50,6 +52,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         AppIdentifierPrefix: $(AppIdentifierPrefix)
         ITSAppUsesNonExemptEncryption: true
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         LSApplicationCategoryType: public.app-category.social-networking
         UILaunchScreen:
           UIColorName: LaunchBackground
@@ -87,9 +91,57 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         ENABLE_PREVIEWS: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: ""
+
+  AsgardMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Mac
+      - path: App/Theme
+      - path: SharedUI
+    dependencies:
+      - package: AsgardKit
+      - package: LiveKit
+    entitlements:
+      path: Mac/AsgardMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.downloads.read-write: true
+        com.apple.developer.aps-environment: development
+        com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleDisplayName: Asgard
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.social-networking
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSCameraUsageDescription: Share video in calls and voice rooms.
+        NSMicrophoneUsageDescription: Talk in calls and voice rooms, and record voice messages.
+        NSLocalNetworkUsageDescription: Connect to an Asgard server on your home network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.giantmushroom.asgardchat
+            CFBundleURLSchemes: [asgard]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID)
+        PRODUCT_NAME: Asgard
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        COMBINE_HIDPI_IMAGES: YES
 
   AsgardNotificationService:
     type: app-extension
@@ -103,7 +155,6 @@ targets:
       properties:
         com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
         keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
-        com.apple.developer.usernotifications.filtering: false
     info:
       path: NotificationService/Info.plist
       properties:
@@ -188,6 +239,14 @@ schemes:
     build:
       targets:
         AsgardChat: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  AsgardMac:
+    build:
+      targets:
+        AsgardMac: all
     run:
       config: Debug
     archive:

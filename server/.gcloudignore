@@ -1,0 +1,5 @@
+# Sent to Cloud Build when deploying the push relay: source only.
+.gcloudignore
+.git
+bin/
+*_test.go

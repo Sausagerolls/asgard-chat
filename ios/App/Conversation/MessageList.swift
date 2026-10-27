@@ -16,6 +16,10 @@ struct MessageList: View {
     @State private var atBottom = true
     @State private var firstUnreadSeq: Int64?
     @State private var loadingOlder = false
+    @State private var motion = ScrollMotion()
+    @State private var arrivals = ArrivalTracker()
+    @Environment(Appearance.self) private var appearance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(conversationID: UUID, kind: ConversationKind) {
         self.conversationID = conversationID
@@ -72,7 +76,9 @@ struct MessageList: View {
                             Text("Unread messages").font(.caption.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 6)
                                 .background(.ultraThinMaterial).padding(.vertical, 6)
                         case .message(let m, let g):
+                            let mine = m.senderUserID == engine.myID
                             MessageRow(message: m, grouping: g, isGroup: kind != .dm && kind != .saved, isChannel: kind == .channel)
+                                .messageMotion(enabled: animate, mine: mine, arriving: animate && arrivals.shouldAnimate(m.clientID, sentAt: m.sentAt))
                                 .id(m.id)
                                 .padding(.top, g == .first || g == .single ? 6 : 0)
                         }
@@ -83,6 +89,10 @@ struct MessageList: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            .environment(motion)
+            .onScrollGeometryChange(for: CGFloat.self) { geo in geo.contentOffset.y } action: { _, y in
+                if animate { motion.scrolled(to: y) }
+            }
             .onScrollGeometryChange(for: Bool.self) { geo in
                 geo.visibleRect.maxY >= geo.contentSize.height - 120
             } action: { _, bottom in atBottom = bottom }
@@ -92,6 +102,13 @@ struct MessageList: View {
                     withAnimation(.smooth) { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 if engine.activeConversation == conversationID { engine.markRead(conversationID) }
+            }
+            .task {
+                // Lazy rows are estimated at first; settle on the real bottom once laid out.
+                for delay in [60, 250, 600] {
+                    try? await Task.sleep(for: .milliseconds(delay))
+                    if atBottom || delay == 60 { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
             .onChange(of: session.scrollTarget) { _, target in
                 guard let target else { return }
@@ -118,6 +135,7 @@ struct MessageList: View {
             .animation(.snappy, value: atBottom)
         }
         .onAppear {
+            arrivals.start(with: messages.map(\.clientID))
             if let sc = engine.storedConversation(conversationID), sc.unread > 0 {
                 let unread = sc.unread
                 let theirs = messages.filter { $0.senderUserID != engine.myID && !$0.isSystem }
@@ -125,6 +143,8 @@ struct MessageList: View {
             }
         }
     }
+
+    var animate: Bool { appearance.messageAnimations && !reduceMotion }
 
     func loadOlder() async {
         guard !loadingOlder, messages.count >= 30 else { return }

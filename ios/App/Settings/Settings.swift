@@ -30,6 +30,7 @@ struct SettingsTab: View {
                     NavigationLink { NotificationSettings() } label: { SettingsLabel("Notifications", "bell.badge.fill", .red) }
                     NavigationLink { ChatSettings() } label: { SettingsLabel("Chats", "bubble.left.and.bubble.right.fill", .green) }
                     NavigationLink { DevicesView() } label: { SettingsLabel("Devices", "laptopcomputer.and.iphone", .orange) }
+                    NavigationLink { HistorySettingsView() } label: { SettingsLabel("Message history", "clock.arrow.circlepath", .indigo) }
                     NavigationLink { StorageSettings() } label: { SettingsLabel("Storage & data", "externaldrive.fill", .teal) }
                     NavigationLink { StarredView(conversationID: nil) } label: { SettingsLabel("Starred messages", "star.fill", .yellow) }
                 }
@@ -165,6 +166,7 @@ struct AppearanceSettings: View {
                     }
                 }
                 Toggle("Animated backgrounds", isOn: $a.animatedBackgrounds)
+                Toggle("Message animations", isOn: $a.messageAnimations)
             }
             Section("Text size") {
                 Slider(value: $a.textScale, in: 0.8...1.3, step: 0.05) { Text("Text size") } minimumValueLabel: { Text("A").font(.caption) } maximumValueLabel: { Text("A").font(.title3) }
@@ -245,7 +247,7 @@ struct PrivacySettings: View {
                 }
             }
             Section {
-                Label("Messages, media, calls, reactions, polls and stories are end-to-end encrypted with keys that never leave your devices.", systemImage: "lock.shield.fill")
+                Label("Messages, media, calls, reactions and polls are end-to-end encrypted with keys that never leave your devices.", systemImage: "lock.shield.fill")
                     .font(.footnote)
             }
         }

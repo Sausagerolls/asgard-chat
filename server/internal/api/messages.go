@@ -75,7 +75,11 @@ type sendRequest struct {
 	ViewOnce     bool                 `json:"view_once"`
 }
 
-var sendKinds = map[string]bool{"msg": true, "edit": true, "delete": true, "reaction": true, "vote": true, "rsvp": true, "pin": true}
+// "control" carries encrypted client-to-client signalling (call and voice room
+// keys). Any member may send it; it is never pushed and expires after a day.
+var sendKinds = map[string]bool{"msg": true, "edit": true, "delete": true, "reaction": true, "vote": true, "rsvp": true, "pin": true, "control": true}
+
+const controlTTL = 24 * time.Hour
 
 func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) error {
 	id, err := pathUUID(r, "convID")
@@ -111,7 +115,7 @@ func (s *Server) deliver(ctx context.Context, user, device, conv uuid.UUID, in *
 	if len(in.Ciphertext) > 256<<10 {
 		return nil, uuid.Nil, badRequest("Message too large; send big content as an attachment.")
 	}
-	if in.Kind != "msg" && in.TargetID == nil {
+	if in.Kind != "msg" && in.Kind != "control" && in.TargetID == nil {
 		return nil, uuid.Nil, badRequest("target_id is required for " + in.Kind)
 	}
 	if in.Alg == "" {
@@ -236,6 +240,10 @@ func (s *Server) deliver(ctx context.Context, user, device, conv uuid.UUID, in *
 		t := time.Now().Add(time.Duration(ttl) * time.Second)
 		expires = &t
 	}
+	if in.Kind == "control" {
+		t := time.Now().Add(controlTTL)
+		expires = &t
+	}
 	msgID := uuid.New()
 	if _, err := tx.Exec(ctx, `INSERT INTO messages(id, conversation_id, seq, client_id, kind, target_id, thread_root_id, sender_user_id, sender_device_id, alg, ciphertext, signature, view_once, expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
@@ -297,6 +305,9 @@ func (s *Server) fanOut(base Envelope, devices map[uuid.UUID]Device, keys map[uu
 		if s.hub.ToDevice(id, realtime.Event{Type: "message", Data: env}) {
 			continue
 		}
+		if base.Kind == "control" {
+			continue
+		}
 		kind := push.Alert
 		if base.Kind != "msg" || muted[d.UserID] || d.UserID == *base.SenderUserID {
 			kind = push.Background
@@ -306,18 +317,18 @@ func (s *Server) fanOut(base Envelope, devices map[uuid.UUID]Device, keys map[uu
 }
 
 func (s *Server) pushEnvelope(ctx context.Context, device uuid.UUID, env *Envelope, kind push.Kind) {
-	if s.push == nil {
+	if !s.push.Any() {
 		return
 	}
-	var provider, token string
-	if err := s.db.QueryRow(ctx, `SELECT push_kind, push_token FROM devices WHERE id = $1`, device).Scan(&provider, &token); err != nil || token == "" {
+	var provider, token, buildEnv string
+	if err := s.db.QueryRow(ctx, `SELECT push_kind, push_token, push_env FROM devices WHERE id = $1`, device).Scan(&provider, &token, &buildEnv); err != nil || token == "" {
 		return
 	}
 	data := map[string]any{"c": env.ConversationID.String(), "m": env.ID.String()}
 	if b, _ := json.Marshal(env); len(b) < 3500 {
 		data["e"] = env
 	}
-	err := s.push.Send(ctx, provider, token, push.Notification{Kind: kind, ThreadID: env.ConversationID.String(), Data: data})
+	err := s.push.Send(ctx, provider, token, buildEnv, push.Notification{Kind: kind, ThreadID: env.ConversationID.String(), Data: data})
 	if errors.Is(err, push.ErrUnregistered) {
 		s.db.Exec(ctx, `UPDATE devices SET push_token = '' WHERE id = $1`, device)
 	} else if err != nil {

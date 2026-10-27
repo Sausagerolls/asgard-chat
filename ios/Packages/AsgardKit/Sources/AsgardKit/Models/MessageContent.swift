@@ -4,7 +4,7 @@ import Foundation
 public struct MessageContent: Codable, Hashable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case text, media, voice, videoNote = "video_note", location, liveLocation = "live_location", poll, vote, event, rsvp
-        case reaction, edit, delete, sticker, gif, contact, callKey = "call_key", systemNote = "system_note"
+        case reaction, edit, delete, sticker, gif, contact, callKey = "call_key", callKeyRequest = "call_key_request", historyKey = "history_key", systemNote = "system_note"
     }
 
     public var v = 1
@@ -23,13 +23,15 @@ public struct MessageContent: Codable, Hashable, Sendable {
     public var location: Location?
     public var linkPreviews: [LinkPreview]?
     public var callKey: CallKey?
+    /// Recovery key for message history, sent only to the user's own devices.
+    public var historyKey: Data?
     public var forwarded: Bool?
     public var silent: Bool?
     public var pinned: Bool?
 
     enum CodingKeys: String, CodingKey {
         case v, type, text, markdown, entities, target, emoji, attachments, poll, vote, event, rsvp, location, forwarded, silent, pinned
-        case replyTo = "reply_to", linkPreviews = "link_previews", callKey = "call_key"
+        case replyTo = "reply_to", linkPreviews = "link_previews", callKey = "call_key", historyKey = "history_key"
     }
 
     public init(type: Kind, text: String? = nil) {

@@ -109,14 +109,9 @@ func serve() error {
 	if err != nil {
 		return fmt.Errorf("media storage: %w", err)
 	}
-	ps, err := push.New(cfg.APNsKeyPath, cfg.APNsKeyID, cfg.APNsTeamID, cfg.APNsTopic, cfg.APNsSandbox, cfg.FCMCredsPath)
-	if err != nil {
-		return err
-	}
-	if !cfg.PushEnabled() {
-		slog.Warn("push notifications disabled: configure APNs and/or FCM secrets")
-	}
-	srv := api.New(cfg, pool, realtime.NewHub(), ps, store)
+	srv := api.New(cfg, pool, realtime.NewHub(), push.New(), store)
+	srv.LoadPushCredentials(ctx)
+	srv.StartPushRelay(ctx)
 	if err := bootstrap(ctx, cfg, srv, pool); err != nil {
 		return err
 	}

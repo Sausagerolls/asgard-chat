@@ -34,11 +34,15 @@ type Server struct {
 
 	callsMu sync.Mutex
 	calls   map[uuid.UUID]*activeCall
+
+	voiceMu sync.Mutex
+	voice   map[uuid.UUID]map[uuid.UUID]*voiceParticipant // conversation -> device -> participant
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, hub *realtime.Hub, ps *push.Sender, st storage.Store) *Server {
 	s := &Server{cfg: cfg, db: db, hub: hub, push: ps, store: st,
-		touched: map[uuid.UUID]time.Time{}, calls: map[uuid.UUID]*activeCall{}}
+		touched: map[uuid.UUID]time.Time{}, calls: map[uuid.UUID]*activeCall{},
+		voice: map[uuid.UUID]map[uuid.UUID]*voiceParticipant{}}
 	hub.OnPresence = s.broadcastPresence
 	return s
 }
@@ -49,6 +53,9 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.RealIP)
 	}
 	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders)
+	if s.cfg.LogRequests {
+		r.Use(logRequests)
+	}
 
 	r.Get("/healthz", s.healthz)
 	r.Get("/.well-known/apple-app-site-association", s.appleAppSiteAssociation)
@@ -77,6 +84,11 @@ func (s *Server) Router() http.Handler {
 				r.Put("/me/password", handler(s.changePassword).ServeHTTP)
 				r.Put("/me/push", handler(s.setPushToken).ServeHTTP)
 				r.Get("/me/devices", handler(s.listMyDevices).ServeHTTP)
+				r.Get("/me/history", handler(s.historyStatus).ServeHTTP)
+				r.Put("/me/history", handler(s.setHistoryKey).ServeHTTP)
+				r.Delete("/me/history", handler(s.deleteHistoryKey).ServeHTTP)
+				r.Get("/me/history/messages", handler(s.historyMessages).ServeHTTP)
+				r.Post("/me/history/backfill", handler(s.historyBackfill).ServeHTTP)
 				r.Delete("/me/devices/{deviceID}", handler(s.revokeDevice).ServeHTTP)
 				r.Post("/devices/link", handler(s.createDeviceLink).ServeHTTP)
 
@@ -112,6 +124,10 @@ func (s *Server) Router() http.Handler {
 					r.Delete("/scheduled/{schedID}", handler(s.cancelScheduled).ServeHTTP)
 					r.Post("/calls", handler(s.startCall).ServeHTTP)
 					r.Post("/calls/end", handler(s.endCall).ServeHTTP)
+					r.Get("/voice", handler(s.voiceRoom).ServeHTTP)
+					r.Post("/voice/join", handler(s.joinVoice).ServeHTTP)
+					r.Post("/voice/update", handler(s.updateVoice).ServeHTTP)
+					r.Post("/voice/leave", handler(s.leaveVoice).ServeHTTP)
 					r.Get("/webhooks", handler(s.listWebhooks).ServeHTTP)
 					r.Post("/webhooks", handler(s.createWebhook).ServeHTTP)
 					r.Delete("/webhooks/{hookID}", handler(s.deleteWebhook).ServeHTTP)
@@ -121,11 +137,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/media/{mediaID}", handler(s.downloadMedia).ServeHTTP)
 				r.Delete("/media/{mediaID}", handler(s.deleteMedia).ServeHTTP)
 
-				r.Get("/stories", handler(s.listStories).ServeHTTP)
-				r.Post("/stories", handler(s.postStory).ServeHTTP)
-				r.Delete("/stories/{storyID}", handler(s.deleteStory).ServeHTTP)
-				r.Post("/stories/{storyID}/view", handler(s.viewStory).ServeHTTP)
-				r.Get("/stories/{storyID}/views", handler(s.storyViews).ServeHTTP)
+				r.Get("/voice", handler(s.activeVoiceRooms).ServeHTTP)
 
 				r.Get("/bots", handler(s.listBots).ServeHTTP)
 				r.Post("/bots", handler(s.createBot).ServeHTTP)
@@ -134,6 +146,12 @@ func (s *Server) Router() http.Handler {
 				r.Route("/admin", func(r chi.Router) {
 					r.Use(requireAdmin)
 					r.Get("/stats", handler(s.adminStats).ServeHTTP)
+					r.Get("/push", handler(s.adminPushStatus).ServeHTTP)
+					r.Put("/push/apns", handler(s.adminSetAPNs).ServeHTTP)
+					r.Delete("/push/apns", handler(s.adminDeleteAPNs).ServeHTTP)
+					r.Put("/push/fcm", handler(s.adminSetFCM).ServeHTTP)
+					r.Delete("/push/fcm", handler(s.adminDeleteFCM).ServeHTTP)
+					r.Post("/push/test", handler(s.adminTestPush).ServeHTTP)
 					r.Get("/users", handler(s.adminUsers).ServeHTTP)
 					r.Patch("/users/{userID}", handler(s.adminUpdateUser).ServeHTTP)
 					r.Post("/users/{userID}/reset-password", handler(s.adminResetPassword).ServeHTTP)
@@ -186,12 +204,13 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) error {
 		"protocol":          1,
 		"open_registration": s.cfg.OpenRegistration || settings.OpenRegistration,
 		"features": map[string]bool{
-			"calls": s.cfg.CallsEnabled(), "push": s.cfg.PushEnabled(), "media": s.store != nil,
-			"stories": true, "bots": true, "communities": true, "channels": true,
+			"calls": s.cfg.CallsEnabled(), "push": s.push.Any(), "media": s.store != nil,
+			"voice_rooms": s.cfg.CallsEnabled(), "bots": true, "communities": true, "channels": true,
 			"server_bots": len(s.cfg.MasterKey) == 32,
 		},
 		"max_upload_bytes": s.cfg.MaxUploadBytes,
 		"livekit_url":      s.cfg.LiveKitURL,
+		"push_relay":       s.relayInfo(),
 	})
 	return nil
 }
@@ -224,19 +243,18 @@ func (s *Server) androidAssetLinks(w http.ResponseWriter, r *http.Request) {
 // ---- server settings ----
 
 type ServerSettings struct {
-	ServerName         string `json:"server_name"`
-	OpenRegistration   bool   `json:"open_registration"`
-	DefaultDisappear   int    `json:"default_disappearing_seconds"`
-	AllowUserBots      bool   `json:"allow_user_bots"`
-	AllowPublicGroups  bool   `json:"allow_public_groups"`
-	AndroidCertSHA256  string `json:"android_cert_sha256"`
-	DefaultQuotaBytes  int64  `json:"default_quota_bytes"`
-	StoryTTLHours      int    `json:"story_ttl_hours"`
-	MessageRetentionDays int  `json:"message_retention_days"` // 0 = forever
+	ServerName           string `json:"server_name"`
+	OpenRegistration     bool   `json:"open_registration"`
+	DefaultDisappear     int    `json:"default_disappearing_seconds"`
+	AllowUserBots        bool   `json:"allow_user_bots"`
+	AllowPublicGroups    bool   `json:"allow_public_groups"`
+	AndroidCertSHA256    string `json:"android_cert_sha256"`
+	DefaultQuotaBytes    int64  `json:"default_quota_bytes"`
+	MessageRetentionDays int    `json:"message_retention_days"` // 0 = forever
 }
 
 func defaultSettings() ServerSettings {
-	return ServerSettings{ServerName: "Asgard", AllowUserBots: true, AllowPublicGroups: true, StoryTTLHours: 24}
+	return ServerSettings{ServerName: "Asgard", AllowUserBots: true, AllowPublicGroups: true}
 }
 
 func (s *Server) settings(ctx context.Context) ServerSettings {

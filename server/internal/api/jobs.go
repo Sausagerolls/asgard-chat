@@ -20,6 +20,7 @@ func (s *Server) RunJobs(ctx context.Context) {
 			return
 		case <-fast.C:
 			s.RunScheduled(ctx)
+			s.sweepVoice(ctx)
 		case <-slow.C:
 			s.janitor(ctx)
 		}
@@ -36,7 +37,6 @@ func (s *Server) janitor(ctx context.Context) {
 	}
 	// Disappearing messages, plus anything that references them.
 	exec("expire messages", `DELETE FROM messages WHERE expires_at < now()`)
-	exec("expire stories", `DELETE FROM stories WHERE expires_at < now()`)
 	exec("expire sessions", `DELETE FROM sessions WHERE expires_at < now()`)
 	exec("expire device links", `DELETE FROM device_links WHERE expires_at < now()`)
 	if days := s.settings(ctx).MessageRetentionDays; days > 0 {

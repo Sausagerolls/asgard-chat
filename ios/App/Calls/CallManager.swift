@@ -15,6 +15,8 @@ final class ActiveCall: Identifiable {
     let title: String
     var video: Bool
     let outgoing: Bool
+    /// A drop-in voice room (group/channel) rather than a ringing call.
+    let isVoiceRoom: Bool
     var connectedAt: Date?
     var muted = false
     var cameraOn: Bool
@@ -24,12 +26,13 @@ final class ActiveCall: Identifiable {
     var room = Room()
     var revision = 0
 
-    init(id: UUID, conversationID: UUID, title: String, video: Bool, outgoing: Bool) {
+    init(id: UUID, conversationID: UUID, title: String, video: Bool, outgoing: Bool, isVoiceRoom: Bool = false) {
         self.id = id
         self.conversationID = conversationID
         self.title = title
         self.video = video
         self.outgoing = outgoing
+        self.isVoiceRoom = isVoiceRoom
         cameraOn = video
         speaker = video
     }
@@ -46,8 +49,9 @@ final class CallManager: NSObject {
     private let provider: CXProvider
     private let controller = CXCallController()
     private var voipRegistry: PKPushRegistry?
-    private var activity: Activity<CallActivityAttributes>?
+    private var hasActivity = false
     private var pendingIncoming: [UUID: ChatEngine.IncomingCall] = [:]
+    private var heartbeat: Task<Void, Never>?
 
     init(engine: ChatEngine) {
         self.engine = engine
@@ -98,6 +102,40 @@ final class CallManager: NSObject {
         }
     }
 
+    // MARK: Voice rooms
+
+    /// Drops into a group or channel's voice room. Nobody is rung.
+    func joinVoiceRoom(_ conversationID: UUID, video: Bool = false) async {
+        if let call = active {
+            if call.isVoiceRoom && call.conversationID == conversationID { presentedCall = call; return }
+            hangUp()
+            while active != nil { try? await Task.sleep(for: .milliseconds(100)) }
+        }
+        let title = engine.storedConversation(conversationID)?.title ?? "Voice room"
+        let call = ActiveCall(id: UUID(), conversationID: conversationID, title: title, video: video, outgoing: true, isVoiceRoom: true)
+        call.state = "Joining…"
+        active = call
+        presentedCall = call
+        if engine.isDemo {
+            call.state = "Demo voice room"
+            call.connectedAt = .now
+            return
+        }
+        let handle = CXHandle(type: .generic, value: conversationID.lower)
+        let start = CXStartCallAction(call: call.id, handle: handle)
+        start.isVideo = video
+        start.contactIdentifier = title
+        do {
+            try await controller.request(CXTransaction(action: start))
+        } catch {
+            await connect(call)
+        }
+    }
+
+    func isInVoiceRoom(_ conversationID: UUID) -> Bool {
+        active.map { $0.isVoiceRoom && $0.conversationID == conversationID } ?? false
+    }
+
     // MARK: Incoming
 
     func reportIncoming(_ incoming: ChatEngine.IncomingCall) {
@@ -140,6 +178,7 @@ final class CallManager: NSObject {
         guard let call = active else { return }
         call.muted.toggle()
         Task { try? await call.room.localParticipant.setMicrophone(enabled: !call.muted) }
+        if call.isVoiceRoom { Task { await engine.updateVoice(call.conversationID, muted: call.muted) } }
         updateActivity()
     }
 
@@ -148,6 +187,7 @@ final class CallManager: NSObject {
         call.cameraOn.toggle()
         if call.cameraOn { call.video = true }
         Task { try? await call.room.localParticipant.setCamera(enabled: call.cameraOn) }
+        if call.isVoiceRoom { Task { await engine.updateVoice(call.conversationID, video: call.cameraOn) } }
         updateActivity()
     }
 
@@ -173,12 +213,13 @@ final class CallManager: NSObject {
     // MARK: Media
 
     func connect(_ call: ActiveCall) async {
+        if call.isVoiceRoom { await connectVoiceRoom(call); return }
         do {
             let join = try await engine.startCall(call.conversationID, video: call.video)
             var options = RoomOptions(adaptiveStream: true, dynacast: true)
             if let key = await waitForKey(join.room) {
                 let provider = BaseKeyProvider(isSharedKey: true)
-                provider.setKey(keyData: key)
+                provider.setKey(key: key.base64EncodedString())
                 options = RoomOptions(adaptiveStream: true, dynacast: true, encryptionOptions: EncryptionOptions(keyProvider: provider))
             }
             call.room = Room(delegate: self, roomOptions: options)
@@ -195,6 +236,39 @@ final class CallManager: NSObject {
             engine.banner = (error as? APIError)?.message ?? "Couldn't connect the call."
             provider.reportCall(with: call.id, endedAt: .now, reason: .failed)
             await teardown(call, notifyServer: false)
+        }
+    }
+
+    func connectVoiceRoom(_ call: ActiveCall) async {
+        do {
+            let (join, key) = try await engine.joinVoice(call.conversationID, muted: call.muted, video: call.video)
+            guard let key else {
+                throw APIError(status: 0, code: "no_room_key", message: "Couldn't get the voice room's encryption key. Try again in a moment.")
+            }
+            let keyProvider = BaseKeyProvider(isSharedKey: true)
+            keyProvider.setKey(key: key.base64EncodedString())
+            let options = RoomOptions(adaptiveStream: true, dynacast: true, encryptionOptions: EncryptionOptions(keyProvider: keyProvider))
+            call.room = Room(delegate: self, roomOptions: options)
+            AudioManager.shared.isSpeakerOutputPreferred = call.speaker
+            try await call.room.connect(url: join.url, token: join.token)
+            try await call.room.localParticipant.setMicrophone(enabled: !call.muted)
+            if call.video { try await call.room.localParticipant.setCamera(enabled: true) }
+            provider.reportOutgoingCall(with: call.id, startedConnectingAt: .now)
+            markConnected(call)
+            refresh(call.room)
+            startActivity(call)
+            let conv = call.conversationID
+            heartbeat = Task { [engine] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    await engine.updateVoice(conv)
+                }
+            }
+        } catch {
+            call.state = "Couldn't join"
+            engine.banner = (error as? APIError)?.message ?? "Couldn't join the voice room."
+            provider.reportCall(with: call.id, endedAt: .now, reason: .failed)
+            await teardown(call, notifyServer: true)
         }
     }
 
@@ -220,38 +294,53 @@ final class CallManager: NSObject {
     func teardown(_ call: ActiveCall, notifyServer: Bool) async {
         let duration = call.connectedAt.map { Date.now.timeIntervalSince($0) } ?? 0
         await call.room.disconnect()
+        if call.isVoiceRoom {
+            heartbeat?.cancel()
+            heartbeat = nil
+            if !engine.isDemo { await engine.leaveVoice(call.conversationID) }
+            if active === call { active = nil }
+            if presentedCall === call { presentedCall = nil }
+            hasActivity = false
+            await Self.endActivities()
+            return
+        }
         if notifyServer || call.participants.isEmpty {
             await engine.endCall(call.conversationID, reason: "hangup", all: engine.conversation(call.conversationID)?.kind == .dm || call.participants.isEmpty)
         }
         engine.recordCall(call.conversationID, video: call.video, outgoing: call.outgoing, duration: duration, missed: false)
         if active === call { active = nil }
         if presentedCall === call { presentedCall = nil }
-        activity = nil
+        hasActivity = false
         await Self.endActivities()
     }
 
     // MARK: Live Activity
 
-    nonisolated static func endActivities() async {
-        for a in Activity<CallActivityAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
-    }
+    // Live Activities (Dynamic Island, Lock Screen) exist on iPhone and iPad only.
 
-    nonisolated static func updateActivities(_ state: CallActivityAttributes.ContentState) async {
-        for a in Activity<CallActivityAttributes>.activities { await a.update(.init(state: state, staleDate: nil)) }
+    nonisolated static func endActivities() async {
+        #if !targetEnvironment(macCatalyst)
+        for a in Activity<CallActivityAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
+        #endif
     }
 
     func startActivity(_ call: ActiveCall) {
+        #if !targetEnvironment(macCatalyst)
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let state = CallActivityAttributes.ContentState(connectedAt: call.connectedAt, muted: call.muted, video: call.video, participants: call.participants.count + 1)
-        activity = try? Activity.request(attributes: CallActivityAttributes(conversationID: call.conversationID.lower, title: call.title),
-                                         content: .init(state: state, staleDate: nil))
+        hasActivity = (try? Activity.request(attributes: CallActivityAttributes(conversationID: call.conversationID.lower, title: call.title),
+                                             content: .init(state: state, staleDate: nil))) != nil
+        #endif
     }
 
     func updateActivity() {
-        guard let call = active, let activity else { return }
+        #if !targetEnvironment(macCatalyst)
+        guard let call = active, hasActivity else { return }
         let state = CallActivityAttributes.ContentState(connectedAt: call.connectedAt, muted: call.muted, video: call.video, participants: call.participants.count + 1)
-        _ = activity
-        Task { await Self.updateActivities(state) }
+        Task {
+            for a in Activity<CallActivityAttributes>.activities { await a.update(.init(state: state, staleDate: nil)) }
+        }
+        #endif
     }
 }
 
@@ -346,6 +435,17 @@ extension CallManager: RoomDelegate {
     }
 
     nonisolated func room(_ room: Room, participant: RemoteParticipant, didUnsubscribeTrack publication: RemoteTrackPublication) {
+        Task { @MainActor in refresh(room) }
+    }
+
+    nonisolated func room(_ room: Room, didUpdateSpeakingParticipants participants: [Participant]) {
+        Task { @MainActor in
+            guard let call = active, call.room === room else { return }
+            call.revision += 1
+        }
+    }
+
+    nonisolated func room(_ room: Room, participant: Participant, trackPublication: TrackPublication, didUpdateIsMuted isMuted: Bool) {
         Task { @MainActor in refresh(room) }
     }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -237,5 +238,20 @@ func (l *limiter) middleware(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+// logRequests writes one line per request (method, path, status, client).
+// Paths never contain message content; enable only when debugging.
+func logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		start := time.Now()
+		next.ServeHTTP(ww, r)
+		if r.URL.Path == "/healthz" {
+			return
+		}
+		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", ww.Status(),
+			"ms", time.Since(start).Milliseconds(), "client", r.RemoteAddr, "ua", r.UserAgent())
 	})
 }

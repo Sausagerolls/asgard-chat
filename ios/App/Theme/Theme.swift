@@ -72,6 +72,7 @@ final class Appearance {
     var wallpaper: Wallpaper { didSet { save() } }
     var textScale: Double { didSet { save() } }
     var animatedBackgrounds: Bool { didSet { save() } }
+    var messageAnimations: Bool { didSet { save() } }
 
     init() {
         let d = UserDefaults.standard
@@ -81,6 +82,7 @@ final class Appearance {
         wallpaper = Wallpaper(rawValue: d.string(forKey: "wallpaper") ?? "") ?? .aurora
         textScale = d.object(forKey: "textScale") as? Double ?? 1
         animatedBackgrounds = d.object(forKey: "animatedBackgrounds") as? Bool ?? true
+        messageAnimations = d.object(forKey: "messageAnimations") as? Bool ?? true
     }
 
     private func save() {
@@ -91,6 +93,7 @@ final class Appearance {
         d.set(wallpaper.rawValue, forKey: "wallpaper")
         d.set(textScale, forKey: "textScale")
         d.set(animatedBackgrounds, forKey: "animatedBackgrounds")
+        d.set(messageAnimations, forKey: "messageAnimations")
     }
 }
 

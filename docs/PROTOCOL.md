@@ -10,7 +10,7 @@ This document is the contract between the server (`server/`) and every client
   conversation, conversation titles/descriptions, timestamps, message sizes,
   device lists and push tokens. (Same class of metadata WhatsApp's servers see.)
 - The server never sees: message text, media, reactions, poll options/votes,
-  edits, story content, call media, location, voice notes, or file names.
+  edits, call or voice room media, location, voice notes, or file names.
 - Every message is signed by the sending device. Clients verify the signature
   against the sender's published signing key, so the server cannot forge or
   alter messages. Clients show a safety-number change warning when a contact's
@@ -136,7 +136,7 @@ The final chunk uses `final_flag = 1` to prevent truncation. The server stores
 POST /api/v1/conversations/{id}/messages
 {
   "client_id": "uuid chosen by the client (idempotency key)",
-  "kind": "msg" | "edit" | "delete" | "reaction" | "vote" | "rsvp" | "pin",
+  "kind": "msg" | "edit" | "delete" | "reaction" | "vote" | "rsvp" | "pin" | "control",
   "target_id": "required for edit/delete/reaction/vote/rsvp",
   "thread_root_id": "optional",
   "ciphertext": "...", "signature": "...", "alg": "fanout-v1",
@@ -152,6 +152,10 @@ conversation's members. If not it answers `409 device_mismatch` with
 `{"missing": [...], "extra": [...]}` and the client refreshes
 `GET /conversations/{id}/devices`, re-wraps and retries. This guarantees no
 device silently misses a message and no removed device keeps receiving them.
+
+`kind=control` carries client signalling (`call_key`, `call_key_request`
+content types for call and voice room media keys). Any member may send it,
+the server never pushes it, and it expires after 24 hours.
 
 `kind=delete` additionally makes the server erase the target's ciphertext
 (only the sender or a conversation admin may do this).
@@ -184,8 +188,8 @@ membership/title/role changes; they have no `ciphertext`.
 ### Realtime events
 
 Server -> client: `message`, `receipt`, `typing`, `presence`,
-`conversation.updated`, `conversation.removed`, `member.updated`, `story`,
-`call.ring`, `call.ended`, `device.added`, `keys.changed`.
+`conversation.updated`, `conversation.removed`, `member.updated`,
+`call.ring`, `call.ended`, `voice.state`, `device.added`, `keys.changed`.
 
 Client -> server: `typing {conversation_id, state}`, `presence {state}`,
 `ack {cursor}`, `read {conversation_id, seq}`, `ping`.
@@ -237,3 +241,15 @@ a bot token.
 
 Incoming webhook: `POST /api/v1/hooks/{hook_id}/{secret}` with
 `{"text": "...", "markdown": true}`.
+
+## Voice rooms
+
+Groups and channels (including those inside communities) each have an always-open LiveKit room
+(`voice-<conversation id>`). `POST /conversations/{id}/voice/join` returns a
+token, the participant list (earliest joiner first) and `first`. The first
+joiner creates a random 32-byte media key and sends it as a `call_key`
+control message to the conversation. A later joiner without the key sends a
+`call_key_request` control message; the earliest participant still in the
+room answers with `call_key`. Clients heartbeat with `POST .../voice/update`
+(which also carries mute/video state) and the server drops participants
+that stop. Membership changes are broadcast as `voice.state` events.

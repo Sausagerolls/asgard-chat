@@ -14,13 +14,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/giantmushroom/asgard-chat/server/internal/config"
 	"github.com/giantmushroom/asgard-chat/server/internal/db"
 	"github.com/giantmushroom/asgard-chat/server/internal/e2ee"
+	"github.com/giantmushroom/asgard-chat/server/internal/push"
 	"github.com/giantmushroom/asgard-chat/server/internal/realtime"
 )
 
@@ -318,4 +321,224 @@ func fanoutKeys(t *testing.T, c *testClient, conv uuid.UUID) map[string]string {
 		}
 	}
 	return keys
+}
+
+func TestVoiceRooms(t *testing.T) {
+	ts, srv := newTestServer(t)
+	srv.cfg.LiveKitURL, srv.cfg.LiveKitAPIKey, srv.cfg.LiveKitAPISecret = "ws://lk", "key", "secret-secret-secret-secret-secret"
+	ctx := context.Background()
+	boot, _ := CreateInvite(ctx, srv, nil, "boot", 1, true, 0)
+	odin := register(t, ts.URL, boot.Code, "odin")
+	var inv Invite
+	odin.do("POST", "/api/v1/admin/invites", map[string]any{"max_uses": 3}, &inv)
+	thor := register(t, ts.URL, inv.Code, "thor")
+	loki := register(t, ts.URL, inv.Code, "loki")
+
+	var ch, dm Conversation
+	if st := odin.do("POST", "/api/v1/conversations", map[string]any{"kind": "channel", "title": "Hall", "member_ids": []uuid.UUID{thor.user}}, &ch); st != http.StatusCreated {
+		t.Fatalf("create channel: %d", st)
+	}
+	odin.do("POST", "/api/v1/conversations", map[string]any{"kind": "dm", "member_ids": []uuid.UUID{thor.user}}, &dm)
+	base := "/api/v1/conversations/" + ch.ID.String() + "/voice"
+
+	type join struct {
+		Token        string             `json:"token"`
+		Room         string             `json:"room"`
+		First        bool               `json:"first"`
+		Participants []voiceParticipant `json:"participants"`
+	}
+	// Channel subscribers can drop in; the first joiner is told to make the key.
+	var j1, j2 join
+	if st := thor.do("POST", base+"/join", map[string]any{}, &j1); st != http.StatusOK || !j1.First || j1.Token == "" {
+		t.Fatalf("thor join: %d %+v", st, j1)
+	}
+	if st := odin.do("POST", base+"/join", map[string]any{"muted": true}, &j2); st != http.StatusOK || j2.First || len(j2.Participants) != 2 {
+		t.Fatalf("odin join: %d %+v", st, j2)
+	}
+	if j2.Participants[0].UserID != thor.user {
+		t.Fatal("participants not ordered by join time")
+	}
+	// Non-members can't see or join; DMs have no voice room.
+	if st := loki.do("POST", base+"/join", map[string]any{}, nil); st != http.StatusNotFound {
+		t.Fatalf("non-member join: %d", st)
+	}
+	if st := odin.do("POST", "/api/v1/conversations/"+dm.ID.String()+"/voice/join", map[string]any{}, nil); st != http.StatusBadRequest {
+		t.Fatalf("dm voice: %d", st)
+	}
+	// Mute state is visible to others.
+	thor.do("POST", base+"/update", map[string]any{"muted": true}, nil)
+	var room struct {
+		Participants []voiceParticipant `json:"participants"`
+	}
+	odin.do("GET", base, nil, &room)
+	if len(room.Participants) != 2 || !room.Participants[0].Muted {
+		t.Fatalf("room state: %+v", room)
+	}
+	var active []map[string]any
+	if odin.do("GET", "/api/v1/voice", nil, &active); len(active) != 1 {
+		t.Fatalf("active rooms for member: %v", active)
+	}
+	if loki.do("GET", "/api/v1/voice", nil, &active); len(active) != 0 {
+		t.Fatalf("active rooms leak to non-member: %v", active)
+	}
+	// Leaving empties the room; the next joiner makes a new key.
+	thor.do("POST", base+"/leave", nil, nil)
+	odin.do("POST", base+"/leave", nil, nil)
+	odin.do("GET", base, nil, &room)
+	if len(room.Participants) != 0 {
+		t.Fatalf("room not empty: %+v", room)
+	}
+	if thor.do("POST", base+"/join", map[string]any{}, &j1); !j1.First {
+		t.Fatal("rejoin of empty room not first")
+	}
+	// Devices that vanish without leaving are swept.
+	srv.voiceMu.Lock()
+	for _, p := range srv.voice[ch.ID] {
+		p.seen = time.Now().Add(-2 * voiceStale)
+	}
+	srv.voiceMu.Unlock()
+	srv.sweepVoice(ctx)
+	if odin.do("GET", base, nil, &room); len(room.Participants) != 0 {
+		t.Fatal("stale participant not swept")
+	}
+}
+
+func TestPushAdmin(t *testing.T) {
+	ts, srv := newTestServer(t)
+	srv.push = push.New()
+	ctx := context.Background()
+	boot, _ := CreateInvite(ctx, srv, nil, "boot", 1, true, 0)
+	odin := register(t, ts.URL, boot.Code, "odin")
+	var inv Invite
+	odin.do("POST", "/api/v1/admin/invites", map[string]any{"max_uses": 1}, &inv)
+	thor := register(t, ts.URL, inv.Code, "thor")
+
+	if st := thor.do("GET", "/api/v1/admin/push", nil, nil); st != http.StatusForbidden {
+		t.Fatalf("non-admin push status: %d", st)
+	}
+	var status struct {
+		APNs     pushSource `json:"apns"`
+		CanStore bool       `json:"can_store"`
+	}
+	if st := odin.do("GET", "/api/v1/admin/push", nil, &status); st != http.StatusOK || status.APNs.Configured || !status.CanStore {
+		t.Fatalf("push status: %d %+v", st, status)
+	}
+	// Invalid keys are rejected before anything is stored or contacted.
+	if st := odin.do("PUT", "/api/v1/admin/push/apns", map[string]any{"key": "nope", "key_id": "ABCDE12345", "team_id": "TEAM123456"}, nil); st != http.StatusUnprocessableEntity {
+		t.Fatalf("bad apns key: %d", st)
+	}
+	if st := odin.do("PUT", "/api/v1/admin/push/fcm", map[string]any{"credentials": "{}"}, nil); st != http.StatusUnprocessableEntity {
+		t.Fatalf("bad fcm creds: %d", st)
+	}
+	var info struct {
+		Features map[string]bool `json:"features"`
+	}
+	odin.do("GET", "/api/v1/info", nil, &info)
+	if info.Features["push"] {
+		t.Fatal("push should be off")
+	}
+	// Devices report their build environment with their token.
+	if st := odin.do("PUT", "/api/v1/me/push", map[string]any{"kind": "apns", "token": "abc", "env": "development"}, nil); st != http.StatusNoContent {
+		t.Fatalf("set push token: %d", st)
+	}
+	var env string
+	srv.db.QueryRow(ctx, `SELECT push_env FROM devices WHERE id = $1`, odin.device).Scan(&env)
+	if env != "development" {
+		t.Fatalf("push env = %q", env)
+	}
+	var results []map[string]any
+	if st := odin.do("POST", "/api/v1/admin/push/test", nil, &results); st != http.StatusOK || len(results) != 1 {
+		t.Fatalf("test push: %d %v", st, results)
+	}
+}
+
+func TestHistorySync(t *testing.T) {
+	ts, srv := newTestServer(t)
+	ctx := context.Background()
+	boot, _ := CreateInvite(ctx, srv, nil, "boot", 1, true, 0)
+	odin := register(t, ts.URL, boot.Code, "odin")
+	var inv Invite
+	odin.do("POST", "/api/v1/admin/invites", map[string]any{"max_uses": 1}, &inv)
+	thor := register(t, ts.URL, inv.Code, "thor")
+	var dm Conversation
+	odin.do("POST", "/api/v1/conversations", map[string]any{"kind": "dm", "member_ids": []uuid.UUID{thor.user}}, &dm)
+
+	// A message from before history sync existed.
+	_, early := thor.send(dm.ID, "before", nil)
+	earlyID := uuid.MustParse(early["id"].(string))
+
+	hist, _ := e2ee.GenerateDeviceKeys()
+	var status struct {
+		Enabled     bool   `json:"enabled"`
+		IdentityKey []byte `json:"identity_key"`
+		Messages    int    `json:"messages"`
+	}
+	if st := odin.do("PUT", "/api/v1/me/history", map[string]any{"identity_key": hist.IdentityPublic[:], "signing_key": []byte(hist.SigningPublic)}, &status); st != http.StatusOK || !status.Enabled {
+		t.Fatalf("enable history: %d %+v", st, status)
+	}
+	// The history device is part of fan-out but hidden from the device list.
+	var mine []Device
+	odin.do("GET", "/api/v1/me/devices", nil, &mine)
+	if len(mine) != 1 {
+		t.Fatalf("history device listed: %d devices", len(mine))
+	}
+	var convDevices []Device
+	thor.do("GET", "/api/v1/conversations/"+dm.ID.String()+"/devices", nil, &convDevices)
+	if len(convDevices) != 3 {
+		t.Fatalf("conversation devices = %d, want 3 (two phones + history)", len(convDevices))
+	}
+	if st, out := thor.send(dm.ID, "after", nil); st != http.StatusCreated {
+		t.Fatalf("send with history device: %d %v", st, out)
+	}
+
+	type page struct {
+		Envelopes []Envelope `json:"envelopes"`
+	}
+	var p page
+	odin.do("GET", "/api/v1/me/history/messages", nil, &p)
+	if len(p.Envelopes) != 1 {
+		t.Fatalf("history before backfill: %d envelopes", len(p.Envelopes))
+	}
+	key, err := e2ee.Unwrap(p.Envelopes[0].WrappedKey, hist.IdentityPrivate, hist.IdentityPublic, p.Envelopes[0].ClientID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pt, _ := e2ee.Open(key, p.Envelopes[0].Ciphertext, e2ee.AAD(dm.ID.String(), p.Envelopes[0].SenderDeviceID.String(), p.Envelopes[0].ClientID.String()))
+	if !strings.Contains(string(pt), "after") {
+		t.Fatalf("history decrypted %q", pt)
+	}
+
+	// Odin's phone re-wraps the old message's key for the history device.
+	var hist2 []Envelope
+	odin.do("GET", "/api/v1/conversations/"+dm.ID.String()+"/messages", nil, &hist2)
+	var old Envelope
+	for _, e := range hist2 {
+		if e.ID == earlyID {
+			old = e
+		}
+	}
+	oldKey, err := e2ee.Unwrap(old.WrappedKey, odin.keys.IdentityPrivate, odin.keys.IdentityPublic, old.ClientID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewrapped, _ := e2ee.Wrap(oldKey, hist.IdentityPublic[:], old.ClientID.String())
+	var res struct{ Added int }
+	odin.do("POST", "/api/v1/me/history/backfill", map[string]any{"items": []map[string]any{{"message_id": earlyID, "wrapped_key": rewrapped}}}, &res)
+	if res.Added != 1 {
+		t.Fatalf("backfill added %d", res.Added)
+	}
+	// Thor can't backfill into Odin's history.
+	if st := thor.do("POST", "/api/v1/me/history/backfill", map[string]any{"items": []map[string]any{}}, nil); st != http.StatusNotFound {
+		t.Fatalf("thor backfill without history: %d", st)
+	}
+	odin.do("GET", "/api/v1/me/history/messages", nil, &p)
+	if len(p.Envelopes) != 2 {
+		t.Fatalf("history after backfill: %d", len(p.Envelopes))
+	}
+
+	// Turning it off removes the device and everything wrapped for it.
+	odin.do("DELETE", "/api/v1/me/history", nil, nil)
+	if st := odin.do("GET", "/api/v1/me/history/messages", nil, nil); st != http.StatusNotFound {
+		t.Fatalf("history after delete: %d", st)
+	}
 }

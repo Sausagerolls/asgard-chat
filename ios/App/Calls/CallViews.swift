@@ -13,7 +13,9 @@ struct CallScreen: View {
         ZStack {
             AuroraBackground(intensity: 0.9)
             let _ = call.revision
-            if call.video, let remote = call.participants.first(where: { $0.firstCameraVideoTrack != nil }) {
+            if call.isVoiceRoom {
+                VoiceRoomStage(call: call)
+            } else if call.video, let remote = call.participants.first(where: { $0.firstCameraVideoTrack != nil }) {
                 if call.participants.count > 1 {
                     VideoGrid(participants: call.participants)
                 } else if let track = remote.firstCameraVideoTrack {
@@ -43,7 +45,7 @@ struct CallScreen: View {
                     }
                 }
             }
-            if call.cameraOn, let local = call.room.localParticipant.firstCameraVideoTrack {
+            if !call.isVoiceRoom, call.cameraOn, let local = call.room.localParticipant.firstCameraVideoTrack {
                 SwiftUIVideoView(local, layoutMode: .fill, mirrorMode: .mirror)
                     .frame(width: 110, height: 160).clipShape(.rect(cornerRadius: 18))
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.3)))
@@ -55,7 +57,12 @@ struct CallScreen: View {
                     Button { dismiss() } label: { Image(systemName: "chevron.down").font(.headline).frame(width: 44, height: 44) }
                         .glassEffect(.regular.interactive(), in: .circle)
                     Spacer()
-                    if call.video { Text(call.connectedAt.map { _ in call.title } ?? call.state).font(.headline) }
+                    if call.isVoiceRoom {
+                        VStack(spacing: 0) {
+                            Label(call.title, systemImage: "speaker.wave.2.fill").font(.headline).lineLimit(1)
+                            Label("End-to-end encrypted", systemImage: "lock.fill").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    } else if call.video { Text(call.connectedAt.map { _ in call.title } ?? call.state).font(.headline) }
                     Spacer()
                     SwiftUIAudioRoutePickerButton().frame(width: 44, height: 44).glassEffect(.regular.interactive(), in: .circle)
                 }
@@ -71,7 +78,7 @@ struct CallScreen: View {
                             Image(systemName: "phone.down.fill").font(.title2).foregroundStyle(.white).frame(width: 68, height: 68)
                         }
                         .glassEffect(.regular.tint(.red).interactive(), in: .circle)
-                        .accessibilityLabel("End call")
+                        .accessibilityLabel(call.isVoiceRoom ? "Leave voice room" : "End call")
                     }
                 }
                 .padding(.bottom, 30)

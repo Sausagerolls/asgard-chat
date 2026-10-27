@@ -48,6 +48,11 @@
 	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.social-networking</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Asgard uses the camera for photos, video messages, video calls and scanning device-link QR codes.</string>
 	<key>NSContactsUsageDescription</key>

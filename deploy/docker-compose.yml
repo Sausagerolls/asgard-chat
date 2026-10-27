@@ -40,11 +40,11 @@ services:
       ASGARD_LIVEKIT_URL: wss://${LIVEKIT_DOMAIN}
       ASGARD_LIVEKIT_API_KEY_FILE: /run/secrets/livekit_api_key
       ASGARD_LIVEKIT_API_SECRET_FILE: /run/secrets/livekit_api_secret
+      ASGARD_PUSH_RELAY: ${ASGARD_PUSH_RELAY:-}
       ASGARD_APNS_KEY_FILE: ${APNS_KEY_FILE:-}
       ASGARD_APNS_KEY_ID: ${APNS_KEY_ID:-}
       ASGARD_APNS_TEAM_ID: ${APNS_TEAM_ID:-}
       ASGARD_APNS_TOPIC: ${APNS_TOPIC:-com.giantmushroom.asgardchat}
-      ASGARD_APNS_SANDBOX: ${APNS_SANDBOX:-false}
       ASGARD_FCM_CREDENTIALS_FILE: ${FCM_CREDENTIALS_FILE:-}
       ASGARD_MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
       ASGARD_BOOTSTRAP_INVITE_FILE: /run/secrets/bootstrap_invite

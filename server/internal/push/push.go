@@ -16,7 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,9 +31,9 @@ var ErrUnregistered = errors.New("push: token unregistered")
 type Kind int
 
 const (
-	Alert Kind = iota // message notification, decrypted by the extension
-	VoIP              // incoming call, rings CallKit / ConnectionService
-	Background        // silent sync nudge
+	Alert      Kind = iota // message notification, decrypted by the extension
+	VoIP                   // incoming call, rings CallKit / ConnectionService
+	Background             // silent sync nudge
 )
 
 type Notification struct {
@@ -41,60 +41,155 @@ type Notification struct {
 	ThreadID string         // groups notifications per conversation
 	Data     map[string]any // custom payload (conversation id, envelope...)
 	Collapse string
+	Title    string // optional plain alert, only for server notices like test pushes
+	Body     string
 }
 
+// Sender holds the active provider credentials. They can be replaced at
+// runtime when an admin uploads new keys.
 type Sender struct {
-	apns *apnsClient
-	fcm  *fcmClient
+	mu    sync.RWMutex
+	apns  *apnsClient
+	fcm   *fcmClient
+	relay *RelayClient
 }
 
-func New(apnsKeyPath, keyID, teamID, topic string, sandbox bool, fcmCredsPath string) (*Sender, error) {
-	s := &Sender{}
-	if apnsKeyPath != "" {
-		c, err := newAPNs(apnsKeyPath, keyID, teamID, topic, sandbox)
-		if err != nil {
-			return nil, fmt.Errorf("apns: %w", err)
-		}
-		s.apns = c
+// ConfigureRelay routes devices that registered relay handles through the push relay.
+func (s *Sender) ConfigureRelay(c *RelayClient) { s.mu.Lock(); s.relay = c; s.mu.Unlock() }
+
+// Relay returns the configured relay client, if any.
+func (s *Sender) Relay() *RelayClient {
+	if s == nil {
+		return nil
 	}
-	if fcmCredsPath != "" {
-		c, err := newFCM(fcmCredsPath)
-		if err != nil {
-			return nil, fmt.Errorf("fcm: %w", err)
-		}
-		s.fcm = c
-	}
-	return s, nil
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.relay
 }
 
-// Send dispatches to the right provider. kind is the device's push_kind.
-func (s *Sender) Send(ctx context.Context, provider, token string, n Notification) error {
+func New() *Sender { return &Sender{} }
+
+// ConfigureAPNs installs an APNs auth key (.p8 contents).
+func (s *Sender) ConfigureAPNs(keyPEM []byte, keyID, teamID, topic string) error {
+	c, err := newAPNs(keyPEM, keyID, teamID, topic)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.apns = c
+	s.mu.Unlock()
+	return nil
+}
+
+// ConfigureFCM installs a Firebase service-account JSON.
+func (s *Sender) ConfigureFCM(credentials []byte) error {
+	c, err := newFCM(credentials)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.fcm = c
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *Sender) DisableAPNs() { s.mu.Lock(); s.apns = nil; s.mu.Unlock() }
+func (s *Sender) DisableFCM()  { s.mu.Lock(); s.fcm = nil; s.mu.Unlock() }
+
+// Enabled reports which providers are configured.
+func (s *Sender) Enabled() (apns, fcm bool) {
+	if s == nil {
+		return false, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.apns != nil, s.fcm != nil
+}
+
+func (s *Sender) Any() bool { a, f := s.Enabled(); return a || f || s.Relay() != nil }
+
+// Send dispatches to the right provider. provider is the device's push_kind;
+// env is "development" for debug builds, "production" or "" (unknown).
+func (s *Sender) Send(ctx context.Context, provider, token, env string, n Notification) error {
 	if s == nil || token == "" {
 		return nil
 	}
+	s.mu.RLock()
+	a, f, r := s.apns, s.fcm, s.relay
+	s.mu.RUnlock()
 	switch provider {
+	case "relay":
+		if r == nil {
+			return nil
+		}
+		return r.send(ctx, token, n)
 	case "apns":
-		if s.apns == nil {
+		if a == nil {
 			return nil
 		}
-		return s.apns.send(ctx, token, n)
+		return a.send(ctx, token, env, n)
 	case "fcm":
-		if s.fcm == nil {
+		if f == nil {
 			return nil
 		}
-		return s.fcm.send(ctx, token, n)
+		return f.send(ctx, token, n)
 	}
 	return nil
 }
 
+// VerifyAPNs asks Apple to accept the key without delivering anything: a
+// push to an impossible token is rejected as BadDeviceToken only once the
+// key, Key ID and Team ID have been accepted.
+func VerifyAPNs(ctx context.Context, keyPEM []byte, keyID, teamID, topic string) error {
+	c, err := newAPNs(keyPEM, keyID, teamID, topic)
+	if err != nil {
+		return err
+	}
+	err = c.post(ctx, productionHost, strings.Repeat("0", 64), Notification{Kind: Background})
+	switch {
+	case errors.Is(err, ErrUnregistered):
+		return nil
+	case err == nil:
+		return nil
+	}
+	var ae *apnsError
+	if errors.As(err, &ae) {
+		switch ae.Reason {
+		case "InvalidProviderToken":
+			return errors.New("Apple rejected the key. Check the Key ID and Team ID match this .p8 file.")
+		case "TopicDisallowed", "BadTopic":
+			return fmt.Errorf("this key's team can't send to %q. Use a key from the team that owns the app's bundle ID", topic)
+		case "ExpiredProviderToken", "TooManyProviderTokenUpdates":
+			return errors.New("Apple rejected the key's token. Check the Mac or server clock is correct.")
+		}
+	}
+	return err
+}
+
+// VerifyFCM checks the service account can obtain a Firebase Messaging token.
+func VerifyFCM(ctx context.Context, credentials []byte) (projectID string, err error) {
+	c, err := newFCM(credentials)
+	if err != nil {
+		return "", err
+	}
+	if _, err := c.src.Token(); err != nil {
+		return "", fmt.Errorf("Google rejected the service account: %w", err)
+	}
+	return c.project, nil
+}
+
 // ---- APNs ----
+
+const (
+	productionHost = "https://api.push.apple.com"
+	sandboxHost    = "https://api.sandbox.push.apple.com"
+)
 
 type apnsClient struct {
 	key    *ecdsa.PrivateKey
 	keyID  string
 	teamID string
 	topic  string
-	host   string
 	http   *http.Client
 
 	mu      sync.Mutex
@@ -102,28 +197,34 @@ type apnsClient struct {
 	jwtTime time.Time
 }
 
-func newAPNs(path, keyID, teamID, topic string, sandbox bool) (*apnsClient, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+type apnsError struct {
+	Status int
+	Reason string
+}
+
+func (e *apnsError) Error() string { return fmt.Sprintf("apns %d: %s", e.Status, e.Reason) }
+
+func newAPNs(raw []byte, keyID, teamID, topic string) (*apnsClient, error) {
+	keyID, teamID, topic = strings.TrimSpace(keyID), strings.TrimSpace(teamID), strings.TrimSpace(topic)
+	if len(keyID) != 10 || len(teamID) != 10 {
+		return nil, errors.New("Key ID and Team ID are both 10 characters (see developer.apple.com › Keys)")
+	}
+	if topic == "" {
+		return nil, errors.New("the app's bundle ID is required")
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {
-		return nil, errors.New("invalid .p8 file")
+		return nil, errors.New("that isn't a .p8 key file")
 	}
 	k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("the .p8 file couldn't be read")
 	}
 	ek, ok := k.(*ecdsa.PrivateKey)
 	if !ok {
-		return nil, errors.New(".p8 is not an EC key")
+		return nil, errors.New(".p8 is not an APNs (EC) key")
 	}
-	host := "https://api.push.apple.com"
-	if sandbox {
-		host = "https://api.sandbox.push.apple.com"
-	}
-	return &apnsClient{key: ek, keyID: keyID, teamID: teamID, topic: topic, host: host,
+	return &apnsClient{key: ek, keyID: keyID, teamID: teamID, topic: topic,
 		http: &http.Client{Timeout: 15 * time.Second}}, nil
 }
 
@@ -143,13 +244,30 @@ func (c *apnsClient) bearer() (string, error) {
 	return s, nil
 }
 
-func (c *apnsClient) send(ctx context.Context, token string, n Notification) error {
+// send picks the APNs environment from the device's build. When it is
+// unknown, production is tried first and then the sandbox.
+func (c *apnsClient) send(ctx context.Context, token, env string, n Notification) error {
+	if env == "development" {
+		return c.post(ctx, sandboxHost, token, n)
+	}
+	err := c.post(ctx, productionHost, token, n)
+	if env == "" && errors.Is(err, ErrUnregistered) {
+		return c.post(ctx, sandboxHost, token, n)
+	}
+	return err
+}
+
+func (c *apnsClient) post(ctx context.Context, host, token string, n Notification) error {
 	aps := map[string]any{}
 	topic, pushType, priority := c.topic, "alert", "10"
 	switch n.Kind {
 	case Alert:
 		// The Notification Service Extension replaces this with the decrypted text.
-		aps["alert"] = map[string]string{"title": "Asgard Chat", "body": "New message"}
+		title, text := "Asgard Chat", "New message"
+		if n.Body != "" {
+			title, text = n.Title, n.Body
+		}
+		aps["alert"] = map[string]string{"title": title, "body": text}
 		aps["mutable-content"] = 1
 		aps["sound"] = "default"
 		if n.ThreadID != "" {
@@ -166,7 +284,7 @@ func (c *apnsClient) send(ctx context.Context, token string, n Notification) err
 		body[k] = v
 	}
 	payload, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.host+"/3/device/"+token, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/3/device/"+token, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
@@ -189,11 +307,14 @@ func (c *apnsClient) send(ctx context.Context, token string, n Notification) err
 	if resp.StatusCode == http.StatusOK {
 		return nil
 	}
-	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	if resp.StatusCode == http.StatusGone || bytes.Contains(msg, []byte("BadDeviceToken")) {
+	var out struct {
+		Reason string `json:"reason"`
+	}
+	json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&out)
+	if resp.StatusCode == http.StatusGone || out.Reason == "BadDeviceToken" || out.Reason == "Unregistered" {
 		return ErrUnregistered
 	}
-	return fmt.Errorf("apns %d: %s", resp.StatusCode, msg)
+	return &apnsError{Status: resp.StatusCode, Reason: out.Reason}
 }
 
 // ---- FCM HTTP v1 ----
@@ -204,16 +325,13 @@ type fcmClient struct {
 	http    *http.Client
 }
 
-func newFCM(path string) (*fcmClient, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+func newFCM(raw []byte) (*fcmClient, error) {
 	var meta struct {
 		ProjectID string `json:"project_id"`
+		Type      string `json:"type"`
 	}
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return nil, err
+	if err := json.Unmarshal(raw, &meta); err != nil || meta.Type != "service_account" || meta.ProjectID == "" {
+		return nil, errors.New("that isn't a Firebase service-account JSON file")
 	}
 	creds, err := google.CredentialsFromJSONWithType(context.Background(), raw, google.ServiceAccount, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
@@ -268,7 +386,9 @@ func (c *fcmClient) send(ctx context.Context, token string, n Notification) erro
 		return nil
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	if resp.StatusCode == http.StatusNotFound || bytes.Contains(body, []byte("UNREGISTERED")) {
+	// 404/UNREGISTERED: app uninstalled. 400 "not a valid FCM registration token": token never existed.
+	if resp.StatusCode == http.StatusNotFound || bytes.Contains(body, []byte("UNREGISTERED")) ||
+		(resp.StatusCode == http.StatusBadRequest && bytes.Contains(body, []byte("registration token"))) {
 		return ErrUnregistered
 	}
 	slog.Debug("fcm error", "status", resp.StatusCode)

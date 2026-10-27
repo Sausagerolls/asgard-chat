@@ -7,6 +7,10 @@ public struct APIError: Error, LocalizedError, Sendable {
     public var details: JSONValue?
     public var errorDescription: String? { message }
 
+    public init(status: Int, code: String, message: String, details: JSONValue? = nil) {
+        self.status = status; self.code = code; self.message = message; self.details = details
+    }
+
     public static let offline = APIError(status: 0, code: "offline", message: "You're offline. Messages will send when you reconnect.")
 }
 
@@ -53,8 +57,12 @@ public final class APIClient: Sendable {
         let data: Data, response: URLResponse
         do {
             (data, response) = try await session.data(for: req)
-        } catch let error as URLError where [.notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost, .timedOut, .cannotFindHost].contains(error.code) {
+        } catch let error as URLError where [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed].contains(error.code) {
             throw APIError.offline
+        } catch let error as URLError where [.cannotConnectToHost, .timedOut, .cannotFindHost, .dnsLookupFailed].contains(error.code) {
+            let host = req.url?.host() ?? "the server"
+            throw APIError(status: 0, code: "unreachable",
+                           message: "Can't reach \(host). Check the address, that you're on the same network, and that Asgard is allowed in Settings › Privacy & Security › Local Network.")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {

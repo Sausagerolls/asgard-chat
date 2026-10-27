@@ -50,3 +50,13 @@ ios/Config/Local.xcconfig
 
 # Build logs/scripts
 ios/build/
+android/app/google-services.json
+android/keystore.properties
+android/*.jks
+
+# SwiftPM build output
+**/.build/
+.swiftpm/
+
+# Built APKs for sideloading
+android/dist/

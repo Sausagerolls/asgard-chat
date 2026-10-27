@@ -37,13 +37,14 @@ type Config struct {
 	APNsKeyID    string
 	APNsTeamID   string
 	APNsTopic    string // bundle id
-	APNsSandbox  bool
 	FCMCredsPath string // service account json
+	PushRelayURL string // push relay for the official apps; "" disables
 
-	BootstrapInvite string // optional fixed first invite code
-	MaxUploadBytes  int64
-	SessionTTL      time.Duration
-	TrustProxy      bool
+	BootstrapInvite  string // optional fixed first invite code
+	MaxUploadBytes   int64
+	SessionTTL       time.Duration
+	TrustProxy       bool
+	LogRequests      bool
 	OpenRegistration bool
 }
 
@@ -62,11 +63,12 @@ func Load() (*Config, error) {
 		APNsKeyID:        env("ASGARD_APNS_KEY_ID", ""),
 		APNsTeamID:       env("ASGARD_APNS_TEAM_ID", ""),
 		APNsTopic:        env("ASGARD_APNS_TOPIC", "com.giantmushroom.asgardchat"),
-		APNsSandbox:      envBool("ASGARD_APNS_SANDBOX", false),
 		FCMCredsPath:     env("ASGARD_FCM_CREDENTIALS_FILE", ""),
+		PushRelayURL:     relayURL(),
 		MaxUploadBytes:   int64(envInt("ASGARD_MAX_UPLOAD_MB", 2048)) << 20,
 		SessionTTL:       time.Duration(envInt("ASGARD_SESSION_DAYS", 180)) * 24 * time.Hour,
 		TrustProxy:       envBool("ASGARD_TRUST_PROXY", true),
+		LogRequests:      envBool("ASGARD_LOG_REQUESTS", false),
 		OpenRegistration: envBool("ASGARD_OPEN_REGISTRATION", false),
 	}
 	var err error
@@ -104,7 +106,6 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-func (c *Config) PushEnabled() bool { return c.APNsKeyPath != "" || c.FCMCredsPath != "" }
 func (c *Config) CallsEnabled() bool {
 	return c.LiveKitURL != "" && c.LiveKitAPIKey != "" && c.LiveKitAPISecret != ""
 }
@@ -142,4 +143,20 @@ func secret(k string) (string, error) {
 		return strings.TrimSpace(string(b)), nil
 	}
 	return os.Getenv(k), nil
+}
+
+// DefaultPushRelay serves the official App Store and Play Store builds of the
+// apps. Servers register with it automatically; set ASGARD_PUSH_RELAY=off to
+// use only your own APNs/FCM keys (for apps you build and sign yourself).
+const DefaultPushRelay = "https://push.giantmushroom.studio"
+
+func relayURL() string {
+	switch v := os.Getenv("ASGARD_PUSH_RELAY"); v {
+	case "":
+		return DefaultPushRelay
+	case "off", "false", "none":
+		return ""
+	default:
+		return v
+	}
 }

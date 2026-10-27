@@ -10,6 +10,15 @@ struct AdminView: View {
     @State private var newInvite: Invite?
     @State private var tempPassword: String?
     @State private var showCreate = false
+    @State private var push: PushStatus?
+    @State private var pushTest: String?
+
+    nonisolated struct PushStatus: Decodable, Sendable {
+        nonisolated struct Source: Decodable, Sendable { var configured: Bool; var source: String?; var key_id: String?; var project_id: String? }
+        var apns: Source
+        var fcm: Source
+    }
+    nonisolated struct PushResult: Decodable, Sendable { var name: String; var status: String; var error: String? }
 
     var body: some View {
         List {
@@ -31,6 +40,20 @@ struct AdminView: View {
                 }
             } else if engine.isDemo {
                 Section { Text("Admin tools need a real server.").foregroundStyle(.secondary) }
+            }
+            if let push {
+                Section {
+                    LabeledContent("Apple", value: push.apns.configured ? "On" + (push.apns.key_id.map { " · key \($0)" } ?? "") : "Not set up")
+                    LabeledContent("Android", value: push.fcm.configured ? "On" + (push.fcm.project_id.map { " · \($0)" } ?? "") : "Not set up")
+                    Button("Send a test notification to my devices") { Task { await testPush() } }
+                        .disabled(!push.apns.configured && !push.fcm.configured)
+                    if let pushTest { Text(pushTest).font(.footnote).foregroundStyle(.secondary) }
+                    if let url = engine.account?.serverURL.appending(path: "admin") {
+                        Link(destination: url) { Label("Upload push keys in the web admin", systemImage: "safari") }
+                    }
+                } header: { Text("Notifications") } footer: {
+                    Text("Your server sends notifications with your own Apple and Google keys. Upload them in the web admin's Notifications page.")
+                }
             }
             Section {
                 Button { showCreate = true } label: { Label("Create invite", systemImage: "envelope.badge.person.crop") }
@@ -108,6 +131,14 @@ struct AdminView: View {
         stats = try? await api.send("GET", "/admin/stats")
         users = (try? await api.send("GET", "/admin/users")) ?? []
         invites = (try? await api.send("GET", "/admin/invites")) ?? []
+        push = try? await api.send("GET", "/admin/push")
+    }
+
+    func testPush() async {
+        pushTest = "Sending…"
+        let results: [PushResult] = (try? await engine.api?.send("POST", "/admin/push/test")) ?? []
+        let label = ["sent": "sent", "no_token": "notifications not enabled", "failed": "failed"]
+        pushTest = results.map { "\($0.name): \(label[$0.status] ?? $0.status)\($0.error.map { " — " + $0 } ?? "")" }.joined(separator: "\n")
     }
 }
 

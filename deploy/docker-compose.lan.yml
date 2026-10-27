@@ -1,0 +1,16 @@
+# Local test server on your home network, no domain or TLS needed.
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d asgard postgres livekit
+# Set LAN_HOST in .env to this machine's Bonjour name, e.g. My-Mac.local
+services:
+  asgard:
+    ports: ["8080:8080"]
+    environment:
+      ASGARD_PUBLIC_URL: http://${LAN_HOST}:8080
+      ASGARD_LIVEKIT_URL: ws://${LAN_HOST}:7880
+      ASGARD_LOG_REQUESTS: "true"
+  livekit:
+    ports:
+      - "7880:7880"
+      - "7881:7881/tcp"
+      - "50000-50200:50000-50200/udp"
+      - "3478:3478/udp"
