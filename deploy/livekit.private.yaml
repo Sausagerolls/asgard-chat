@@ -1,0 +1,19 @@
+# LiveKit for servers reached over a private network (Tailscale, LAN, VPN):
+# advertises LIVEKIT_NODE_IP instead of discovering the public IP. Call media is E2EE.
+port: 7880
+log_level: info
+key_file: /etc/livekit_keys.yaml
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Private network (Tailscale, LAN, VPN): advertise the address passed as --node-ip.
+  use_external_ip: false
+turn:
+  enabled: true
+  udp_port: 3478
+  relay_range_start: 50101
+  relay_range_end: 50200
+room:
+  empty_timeout: 60
+  max_participants: 50

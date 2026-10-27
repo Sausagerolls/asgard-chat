@@ -11,6 +11,9 @@
 #   APPDATA=/mnt/cache/appdata/asgard
 #   ASGARD_PUBLIC_URL=https://chat.example.com      (or http://192.168.1.10:8080 on a LAN)
 #   ASGARD_LIVEKIT_URL=wss://rtc.chat.example.com   (or ws://192.168.1.10:7880 on a LAN)
+# Private network only (Tailscale/LAN), no port forwarding:
+#   LIVEKIT_CONFIG=livekit.private.yaml
+#   LIVEKIT_NODE_IP=100.x.y.z                        (this server's Tailscale IP)
 services:
   caddy:
     profiles: ["caddy"] # not started on Unraid
@@ -30,6 +33,11 @@ services:
   livekit:
     network_mode: host
     ports: !reset []
+    # With LIVEKIT_NODE_IP set (e.g. your Tailscale IP), calls use that address
+    # instead of your public IP; no router port forwarding needed.
+    command: ["--config", "/etc/livekit.yaml", "--node-ip", "${LIVEKIT_NODE_IP:-}"]
+    volumes:
+      - ./${LIVEKIT_CONFIG:-livekit.yaml}:/etc/livekit.yaml:ro
 
   backup:
     volumes:
