@@ -86,6 +86,18 @@ docker compose exec asgard asgard user list
 docker compose exec backup backup.sh now
 ```
 
+### Unraid (or any host with an existing reverse proxy)
+
+```sh
+cd deploy && ./setup.sh
+# add to .env: APPDATA=/mnt/cache/appdata/asgard, ASGARD_PUBLIC_URL, ASGARD_LIVEKIT_URL
+docker compose -f docker-compose.yml -f docker-compose.unraid.yml up -d --build
+```
+
+Caddy isn't started; point your proxy (e.g. Nginx Proxy Manager, with
+WebSockets on) at port 8080 for Asgard and 7880 for LiveKit. Data is stored in
+`APPDATA`, not inside docker.img.
+
 ### Push notifications
 
 Open `https://your-domain/admin` › **Notifications** and upload:
