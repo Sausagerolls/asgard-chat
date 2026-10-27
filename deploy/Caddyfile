@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$ASGARD_DOMAIN} {
+	encode zstd gzip
+	# Large encrypted media uploads stream straight through.
+	request_body {
+		max_size 4GB
+	}
+	reverse_proxy asgard:8080 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+}
+
+{$LIVEKIT_DOMAIN} {
+	reverse_proxy livekit:7880
+}

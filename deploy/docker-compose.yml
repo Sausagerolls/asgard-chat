@@ -1,0 +1,123 @@
+# Asgard Chat — full self-hosted stack.
+#   cd deploy && ./setup.sh && docker compose up -d
+# Secrets are read from ./secrets (gitignored). Settings live in ./.env (gitignored).
+name: asgard
+
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      ASGARD_DOMAIN: ${ASGARD_DOMAIN}
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [asgard]
+
+  asgard:
+    build:
+      context: ../server
+      args: { VERSION: "${ASGARD_VERSION:-dev}" }
+    image: asgard-chat/server:${ASGARD_VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      ASGARD_PUBLIC_URL: https://${ASGARD_DOMAIN}
+      ASGARD_DATABASE_URL_FILE: /run/secrets/database_url
+      ASGARD_MASTER_KEY_FILE: /run/secrets/master_key
+      # Encrypted media lives on the asgard_data volume. For S3-compatible
+      # storage (B2, R2, Garage...) set ASGARD_STORAGE=s3 and the S3 vars.
+      ASGARD_STORAGE: ${ASGARD_STORAGE:-fs}
+      ASGARD_MEDIA_DIR: /data/media
+      ASGARD_S3_ENDPOINT: ${S3_ENDPOINT:-}
+      ASGARD_S3_BUCKET: ${S3_BUCKET:-asgard-media}
+      ASGARD_S3_REGION: ${S3_REGION:-}
+      ASGARD_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      ASGARD_S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      ASGARD_LIVEKIT_URL: wss://${LIVEKIT_DOMAIN}
+      ASGARD_LIVEKIT_API_KEY_FILE: /run/secrets/livekit_api_key
+      ASGARD_LIVEKIT_API_SECRET_FILE: /run/secrets/livekit_api_secret
+      ASGARD_APNS_KEY_FILE: ${APNS_KEY_FILE:-}
+      ASGARD_APNS_KEY_ID: ${APNS_KEY_ID:-}
+      ASGARD_APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      ASGARD_APNS_TOPIC: ${APNS_TOPIC:-com.giantmushroom.asgardchat}
+      ASGARD_APNS_SANDBOX: ${APNS_SANDBOX:-false}
+      ASGARD_FCM_CREDENTIALS_FILE: ${FCM_CREDENTIALS_FILE:-}
+      ASGARD_MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      ASGARD_BOOTSTRAP_INVITE_FILE: /run/secrets/bootstrap_invite
+    volumes:
+      - asgard_data:/data
+      # Optional push credentials. Put AuthKey_XXXX.p8 / fcm.json here.
+      - ./secrets/push:/run/secrets/push:ro
+    secrets: [database_url, master_key, livekit_api_key, livekit_api_secret, bootstrap_invite]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: asgard
+      POSTGRES_DB: asgard
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asgard -d asgard"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7881:7881/tcp"              # WebRTC over TCP fallback
+      - "50000-50200:50000-50200/udp" # WebRTC media + TURN relay
+      - "3478:3478/udp"              # embedded TURN
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - ./secrets/livekit_keys.yaml:/etc/livekit_keys.yaml:ro
+
+  backup:
+    build: ./backup
+    restart: unless-stopped
+    environment:
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-/backups}
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-8}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-12}
+      PGHOST: postgres
+      PGUSER: asgard
+      PGDATABASE: asgard
+      PGPASSFILE: /tmp/pgpass
+      # For S3/B2 repositories, set these in .env
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY:-}
+    secrets: [restic_password, postgres_password]
+    volumes:
+      - asgard_data:/media:ro
+      - ${BACKUP_DIR:-./data/backups}:/backups
+    depends_on:
+      postgres: { condition: service_healthy }
+
+secrets:
+  database_url: { file: ./secrets/database_url }
+  master_key: { file: ./secrets/master_key }
+  postgres_password: { file: ./secrets/postgres_password }
+  livekit_api_key: { file: ./secrets/livekit_api_key }
+  livekit_api_secret: { file: ./secrets/livekit_api_secret }
+  bootstrap_invite: { file: ./secrets/bootstrap_invite }
+  restic_password: { file: ./secrets/restic_password }
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  asgard_data:

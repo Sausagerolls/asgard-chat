@@ -1,0 +1,194 @@
+name: AsgardChat
+options:
+  bundleIdPrefix: com.giantmushroom
+  deploymentTarget:
+    iOS: "26.1"
+  createIntermediateGroups: true
+  groupSortPosition: top
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  AsgardKit:
+    path: Packages/AsgardKit
+  LiveKit:
+    url: https://github.com/livekit/client-sdk-swift
+    from: 2.19.0
+settings:
+  base:
+    DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+targets:
+  AsgardChat:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    dependencies:
+      - package: AsgardKit
+      - package: LiveKit
+      - target: AsgardNotificationService
+      - target: AsgardWidgets
+      - target: AsgardShare
+    entitlements:
+      path: App/AsgardChat.entitlements
+      properties:
+        aps-environment: development
+        com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
+        com.apple.developer.associated-domains: [applinks:chat.giantmushroom.studio, webcredentials:chat.giantmushroom.studio]
+        com.apple.developer.siri: true
+        com.apple.developer.usernotifications.communication: true
+        com.apple.developer.usernotifications.time-sensitive: true
+        com.apple.developer.carplay-communication: true
+        com.apple.developer.focus-status: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Asgard
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        ITSAppUsesNonExemptEncryption: true
+        LSApplicationCategoryType: public.app-category.social-networking
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIBackgroundModes: [remote-notification, voip, audio, fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [com.giantmushroom.asgardchat.sync]
+        NSUserActivityTypes: [INSendMessageIntent, INStartCallIntent, INSearchForMessagesIntent, OpenConversationIntent, SendMessageIntent]
+        INIntentsSupported: [INSendMessageIntent, INStartCallIntent, INSearchForMessagesIntent, INSetMessageAttributeIntent]
+        NSSupportsLiveActivities: true
+        NSCameraUsageDescription: Asgard uses the camera for photos, video messages, video calls and scanning device-link QR codes.
+        NSMicrophoneUsageDescription: Asgard uses the microphone for voice messages and calls.
+        NSPhotoLibraryUsageDescription: Choose photos and videos to send.
+        NSPhotoLibraryAddUsageDescription: Save photos and videos you receive.
+        NSLocationWhenInUseUsageDescription: Share your location in a chat when you choose to.
+        NSContactsUsageDescription: Share a contact card in a chat.
+        NSFaceIDUsageDescription: Lock Asgard and individual chats with Face ID.
+        NSSiriUsageDescription: Send and read Asgard messages with Siri, including in CarPlay.
+        NSLocalNetworkUsageDescription: Connect to an Asgard server on your home network.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.giantmushroom.asgardchat
+            CFBundleURLSchemes: [asgard]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID)
+        PRODUCT_NAME: AsgardChat
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        ENABLE_PREVIEWS: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: ""
+
+  AsgardNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationService
+    dependencies:
+      - package: AsgardKit
+    entitlements:
+      path: NotificationService/NotificationService.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
+        com.apple.developer.usernotifications.filtering: false
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Asgard Notifications
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+        NSUserActivityTypes: [INSendMessageIntent]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID).notify
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+
+  AsgardWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: Shared
+    dependencies:
+      - package: AsgardKit
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    entitlements:
+      path: Widgets/Widgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Asgard Widgets
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID).widgets
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  AsgardShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+    dependencies:
+      - package: AsgardKit
+    entitlements:
+      path: Share/Share.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.giantmushroom.asgardchat]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.giantmushroom.asgardchat.shared]
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: Asgard
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+              NSExtensionActivationSupportsMovieWithMaxCount: 4
+              NSExtensionActivationSupportsFileWithMaxCount: 4
+            IntentsSupported: [INSendMessageIntent]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID).share
+
+schemes:
+  AsgardChat:
+    build:
+      targets:
+        AsgardChat: all
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,19 @@
+# LiveKit SFU for voice/video calls. Call media is E2EE (keys distributed in
+# encrypted Asgard messages), so this server only forwards ciphertext.
+port: 7880
+log_level: info
+key_file: /etc/livekit_keys.yaml
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Discover the public IP via STUN. Behind CGNAT, set node_ip instead.
+  use_external_ip: true
+turn:
+  enabled: true
+  udp_port: 3478
+  relay_range_start: 50101
+  relay_range_end: 50200
+room:
+  empty_timeout: 60
+  max_participants: 50

@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Throwaway keys used only by cross-implementation crypto tests"
+paths = ['''ios/Packages/AsgardKit/Tests/AsgardKitTests/Fixtures/.*\.json''']

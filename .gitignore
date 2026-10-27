@@ -1,0 +1,52 @@
+# Secrets — never commit. Real values live in deploy/.env and deploy/secrets/.
+.env
+.env.*
+!.env.example
+deploy/secrets/*
+!deploy/secrets/README.md
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+fcm*.json
+Secrets.xcconfig
+
+# Data volumes
+deploy/data/
+
+# Go
+server/bin/
+server/coverage.out
+
+# Xcode
+ios/*.xcodeproj
+ios/build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Android
+android/.gradle/
+android/build/
+android/**/build/
+android/local.properties
+*.keystore
+*.jks
+
+# Web
+node_modules/
+web/dist/
+
+# OS
+.DS_Store
+
+# Xcode local config
+ios/Config/Local.xcconfig
+
+# Build logs/scripts
+ios/build/

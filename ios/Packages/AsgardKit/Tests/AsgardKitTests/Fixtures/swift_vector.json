@@ -1,0 +1,13 @@
+{
+  "ciphertext" : "tQW2cct+fw4CR27OGGW4DD98y0lyepAF3r4ycDuaGrwt9OcyMR967kLm2KXdSZqg07aBKB9xOW+sgT9eCrJ0amrP0FSn97pfzzo=",
+  "client_id" : "271409ad-2a06-44da-b330-19dceb74d312",
+  "conversation_id" : "c6e766a3-a00a-43dd-b399-f10e93a7f0c9",
+  "plaintext" : "{\"v\":1,\"type\":\"text\",\"text\":\"Hail from Swift\"}",
+  "recipient_identity_private" : "UAFasnjgAttblVbxgvNE3NhT9vdisnMsm2zhqiSMU3o=",
+  "recipient_identity_public" : "Kaz9DgskWTtttwbkUr+a+4Mf\/JE+f+2BzDgZ8g\/e4Uo=",
+  "sender_device_id" : "91126212-0633-4387-88ca-5232cbfc0266",
+  "sender_signing_public" : "Rh2HsI1tAFW9r6EgA8bkePWphevpG77Qy6omfCyuVMo=",
+  "sender_signing_seed" : "\/uMh3FgvJa9Kx7Embamfi\/i72fmC\/IibLfN0siLo8Ak=",
+  "signature" : "BZ0zM9w\/e0H8ZoTAsdgkYsjOC27ZqrKbnDfDITAG9g2sIbGq1njN0IYaBjCcwkzfj9nR\/x0hMHsmQFjuV4UXBg==",
+  "wrapped_key" : "464pUfwghWIAGw1EsvAXt3Ek9iQTKJ+ZmT7FvsllY3qsmkRIsC6P2hhD57Z3URlUlkwcXE9i+4JmB0wLtgs5r64IpnkmMprPQoZBzn1F9ttWcyPbzcUzB7xpihM="
+}

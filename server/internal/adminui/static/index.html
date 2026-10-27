@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asgard Admin</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+
+<main id="login" class="center" hidden>
+  <form class="card login" id="login-form">
+    <img src="icon.png" alt="" class="logo">
+    <h1>Asgard Admin</h1>
+    <p class="muted">Sign in with an administrator account.</p>
+    <label>Username <input name="username" autocomplete="username" required></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">Sign in</button>
+    <p class="error" id="login-error" role="alert"></p>
+  </form>
+</main>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand"><img src="icon.png" alt=""><span id="server-name">Asgard</span><span class="badge">Admin</span></div>
+    <nav id="tabs">
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="users">Users</button>
+      <button data-tab="invites">Invites</button>
+      <button data-tab="audit">Audit log</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+    <button id="logout" class="ghost">Sign out</button>
+  </header>
+
+  <section id="dashboard" class="tab">
+    <div class="grid stats" id="stats"></div>
+    <div class="card">
+      <h2>Privacy</h2>
+      <p class="muted">Messages, media, reactions, polls and stories are end-to-end encrypted. This panel shows
+        accounts, devices and storage use only. It cannot show message content.</p>
+    </div>
+  </section>
+
+  <section id="users" class="tab" hidden>
+    <div class="card">
+      <div class="row"><h2>Users</h2><input id="user-filter" placeholder="Filter" class="filter"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>User</th><th>Status</th><th>Devices</th><th>Storage</th><th>Joined</th><th></th></tr></thead>
+        <tbody id="user-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="invites" class="tab" hidden>
+    <form class="card" id="invite-form">
+      <h2>New invite</h2>
+      <div class="grid form">
+        <label>Note <input name="note" placeholder="For Mum"></label>
+        <label>Uses <input name="max_uses" type="number" min="1" value="1"></label>
+        <label>Expires (hours, 0 = never) <input name="expires_hours" type="number" min="0" value="168"></label>
+        <label class="check"><input name="make_admin" type="checkbox"> Make admin</label>
+      </div>
+      <button class="primary" type="submit">Create invite</button>
+      <div id="new-invite"></div>
+    </form>
+    <div class="card">
+      <h2>Invites</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Note</th><th>Used</th><th>Expires</th><th></th></tr></thead>
+        <tbody id="invite-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="audit" class="tab" hidden>
+    <div class="card">
+      <h2>Audit log</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr></thead>
+        <tbody id="audit-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="settings" class="tab" hidden>
+    <form class="card" id="settings-form">
+      <h2>Server settings</h2>
+      <div class="grid form">
+        <label>Server name <input name="server_name"></label>
+        <label>Story lifetime (hours) <input name="story_ttl_hours" type="number" min="1" max="48"></label>
+        <label>Default disappearing timer for new DMs (seconds, 0 = off) <input name="default_disappearing_seconds" type="number" min="0"></label>
+        <label>Delete messages older than (days, 0 = never) <input name="message_retention_days" type="number" min="0"></label>
+        <label>Default storage quota per user (MB, 0 = unlimited) <input name="default_quota_mb" type="number" min="0"></label>
+        <label>Android signing cert SHA-256 (for app links) <input name="android_cert_sha256" placeholder="AB:CD:..."></label>
+        <label class="check"><input name="open_registration" type="checkbox"> Anyone can register without an invite</label>
+        <label class="check"><input name="allow_user_bots" type="checkbox"> Users can create bots</label>
+        <label class="check"><input name="allow_public_groups" type="checkbox"> Users can create public groups</label>
+      </div>
+      <button class="primary" type="submit">Save</button>
+      <span class="muted" id="settings-saved"></span>
+    </form>
+  </section>
+</div>
+
+<dialog id="dialog"><form method="dialog" class="card"><p id="dialog-text"></p><menu><button value="ok" class="primary">OK</button></menu></form></dialog>
+<script src="admin.js"></script>
+</body>
+</html>
