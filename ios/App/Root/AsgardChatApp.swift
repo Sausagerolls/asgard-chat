@@ -75,7 +75,7 @@ final class AppServices {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-openChat"), i + 1 < args.count { router.openConversation = UUID(uuidString: args[i + 1]) }
         if let i = args.firstIndex(of: "-tab"), i + 1 < args.count {
-            router.selectedTab = ["calls": .calls, "settings": .settings][args[i + 1]] ?? .chats
+            router.selectedTab = ["people": .people, "calls": .calls, "settings": .settings][args[i + 1]] ?? .chats
         }
     }
 
@@ -137,4 +137,4 @@ final class Router {
     }
 }
 
-enum AppTab: Hashable { case chats, calls, settings, search }
+enum AppTab: Hashable { case chats, people, calls, settings, search }

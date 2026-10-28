@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
@@ -86,7 +87,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 
-enum class Tab(val title: String, val icon: ImageVector) { Chats("Chats", Icons.AutoMirrored.Filled.Chat), Calls("Calls", Icons.Filled.Call), Settings("Settings", Icons.Filled.Settings) }
+enum class Tab(val title: String, val icon: ImageVector) { Chats("Chats", Icons.AutoMirrored.Filled.Chat), People("People", Icons.Filled.People), Calls("Calls", Icons.Filled.Call), Settings("Settings", Icons.Filled.Settings) }
 
 @Composable
 fun MainScreen(openChat: MutableState<String?>) {
@@ -102,6 +103,7 @@ fun MainScreen(openChat: MutableState<String?>) {
     Box(Modifier.fillMaxSize()) {
         when (tab) {
             Tab.Chats -> ChatListScreen(convs) { chat = it }
+            Tab.People -> PeopleTab { chat = it; tab = Tab.Chats }
             Tab.Calls -> CallsTab { chat = it; tab = Tab.Chats }
             Tab.Settings -> SettingsTab { chat = it; tab = Tab.Chats }
         }

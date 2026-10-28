@@ -10,7 +10,7 @@
 	<key>manageAppVersionAndBuildNumber</key><true/>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.giantmushroom.asgardchat</key><string>Asgard app App Store 20261028</string>
+		<key>com.giantmushroom.asgardchat</key><string>Asgard app App Store CarPlay 20261028</string>
 		<key>com.giantmushroom.asgardchat.notify</key><string>Asgard notify App Store 20261028</string>
 		<key>com.giantmushroom.asgardchat.widgets</key><string>Asgard widgets App Store 20261028</string>
 		<key>com.giantmushroom.asgardchat.share</key><string>Asgard share App Store 20261028</string>

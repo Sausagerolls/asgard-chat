@@ -12,7 +12,7 @@ enum MacFolder: Hashable, Identifiable {
         switch self {
         case .all: "All Chats"
         case .unread: "Unread"
-        case .people: "People"
+        case .people: "Direct"
         case .groups: "Groups"
         case .channels: "Channels"
         case .archived: "Archived"
@@ -81,8 +81,18 @@ struct MacMainView: View {
     var body: some View {
         @Bindable var nav = nav
         NavigationSplitView(columnVisibility: $columns) {
-            MacChatList()
-                .navigationSplitViewColumnWidth(min: 290, ideal: 340, max: 460)
+            Group {
+                if nav.page == .people { MacPeopleList() } else { MacChatList() }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Picker("Show", selection: $nav.page) {
+                    Text("Chats").tag(MacPage.chats)
+                    Text("People").tag(MacPage.people)
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 2)
+            }
+            .navigationSplitViewColumnWidth(min: 290, ideal: 340, max: 460)
         } detail: {
             if let id = nav.selection, engine.storedConversation(id) != nil {
                 MacChatView(conversationID: id)

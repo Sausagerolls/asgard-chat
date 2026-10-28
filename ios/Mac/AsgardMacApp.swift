@@ -101,6 +101,7 @@ final class MacServices {
         guard let i = args.firstIndex(of: "-screenshot"), i + 1 < args.count, let n = Int(args[i + 1]) else { return }
         let convs = (try? ModelContext(engine.container).fetch(FetchDescriptor<StoredConversation>(sortBy: [SortDescriptor(\.sortDate, order: .reverse)]))) ?? []
         if n < convs.count { nav.selection = convs[n].id }
+        if args.contains("-people") { nav.page = .people }
         if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
             window.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 800), display: true)
             window.center()
@@ -135,10 +136,14 @@ final class MacServices {
     }
 }
 
+/// What the sidebar lists.
+enum MacPage: Hashable { case chats, people }
+
 /// Which chat the main window shows, shared with menus and notifications.
 @MainActor
 @Observable
 final class MacNavigator {
+    var page: MacPage = .chats
     var folder: MacFolder = .all
     var selection: UUID?
     var showInspector = false

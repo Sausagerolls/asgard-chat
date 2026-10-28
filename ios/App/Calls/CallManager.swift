@@ -93,13 +93,25 @@ final class CallManager: NSObject {
         let handle = CXHandle(type: .generic, value: conversationID.lower)
         let start = CXStartCallAction(call: call.id, handle: handle)
         start.isVideo = video
-        start.contactIdentifier = title
         do {
             try await controller.request(CXTransaction(action: start))
+            reportName(call)
         } catch {
             // CallKit unavailable (e.g. simulator restrictions): connect directly.
             await connect(call)
         }
+    }
+
+    /// The handle is the conversation ID (so redialling from Recents works);
+    /// give CallKit a readable name so the Phone app doesn't show the ID.
+    private func reportName(_ call: ActiveCall) {
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: call.conversationID.lower)
+        update.localizedCallerName = call.title
+        update.hasVideo = call.video
+        update.supportsGrouping = false
+        update.supportsHolding = false
+        provider.reportCall(with: call.id, updated: update)
     }
 
     // MARK: Voice rooms
@@ -124,9 +136,9 @@ final class CallManager: NSObject {
         let handle = CXHandle(type: .generic, value: conversationID.lower)
         let start = CXStartCallAction(call: call.id, handle: handle)
         start.isVideo = video
-        start.contactIdentifier = title
         do {
             try await controller.request(CXTransaction(action: start))
+            reportName(call)
         } catch {
             await connect(call)
         }

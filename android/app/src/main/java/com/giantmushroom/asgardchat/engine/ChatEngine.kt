@@ -274,6 +274,19 @@ class ChatEngine(private val context: Context) {
         store(u)
     }
 
+    /** Favourite people, kept in the account's settings so every device shares them. */
+    fun favoriteIds(user: User? = me.value): Set<String> =
+        (user?.settings?.get("favorites") as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.lowercase() }?.toSet() ?: emptySet()
+
+    suspend fun setFavorite(user: String, on: Boolean) {
+        val ids = favoriteIds().let { if (on) it + user.lowercase() else it - user.lowercase() }
+        val value = kotlinx.serialization.json.JsonArray(ids.sorted().map { kotlinx.serialization.json.JsonPrimitive(it) })
+        // Update locally first so the star responds immediately.
+        me.value?.let { m -> me.value = m.copy(settings = (m.settings ?: emptyMap()) + ("favorites" to value)) }
+        runCatching { updateSettings(mapOf("favorites" to value)) }
+    }
+
     suspend fun setFolder(conv: String, folder: String) {
         dao.setFolder(conv, folder)
         runCatching { api?.call("PUT", "/conversations/$conv/prefs", buildJsonObject { put("folder", folder) }) }

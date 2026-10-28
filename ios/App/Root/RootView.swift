@@ -73,6 +73,10 @@ struct MainTabView: View {
             }
             .badge(conversations.reduce(0) { $0 + ($1.isMuted ? 0 : $1.unread) })
 
+            Tab("People", systemImage: "person.2.fill", value: .people) {
+                PeopleTab()
+            }
+
             if engine.callsAvailable {
                 Tab("Calls", systemImage: "phone.fill", value: .calls) {
                     CallsTab()

@@ -309,6 +309,23 @@ public final class ChatEngine {
         store(u)
     }
 
+    // MARK: - Favourites
+
+    /// Favourite people, kept in the account's settings so every device shares them.
+    public var favoriteUserIDs: Set<UUID> {
+        guard case .array(let ids)? = me?.settings?["favorites"] else { return [] }
+        return Set(ids.compactMap { if case .string(let s) = $0 { UUID(uuidString: s) } else { nil } })
+    }
+
+    public func setFavorite(_ user: UUID, _ on: Bool) async {
+        var ids = favoriteUserIDs
+        if on { ids.insert(user) } else { ids.remove(user) }
+        let value = JSONValue.array(ids.map { .string($0.lower) }.sorted { "\($0)" < "\($1)" })
+        // Update locally first so the star responds immediately.
+        if var m = me { var s = m.settings ?? [:]; s["favorites"] = value; m.settings = s; me = m }
+        try? await updateProfile(settings: ["favorites": value])
+    }
+
     // MARK: - Conversations
 
     public func storedConversation(_ id: UUID) -> StoredConversation? {
