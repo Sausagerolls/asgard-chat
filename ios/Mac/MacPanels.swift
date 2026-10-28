@@ -244,6 +244,7 @@ struct MacAccountSettings: View {
     @State private var name = ""
     @State private var bio = ""
     @State private var confirmSignOut = false
+    @State private var cropSource: NSImage?
 
     var body: some View {
         Form {
@@ -264,7 +265,12 @@ struct MacAccountSettings: View {
                 Button("Save") { Task { try? await engine.updateProfile(displayName: name, bio: bio) } }
             }
             Section("Server") {
+                LabeledContent("Name", value: engine.serverInfo?.name ?? "—")
                 LabeledContent("Address", value: engine.account?.serverURL.host() ?? (engine.isDemo ? "Demo" : "—"))
+                LabeledContent("Status") {
+                    Text(engine.connection == .connected ? "Connected" : "Connecting…")
+                        .foregroundStyle(engine.connection == .connected ? .green : .secondary)
+                }
                 if engine.me?.isAdmin == true, let url = engine.account?.serverURL.appending(path: "admin") {
                     Link("Open Server Admin", destination: url)
                 }
@@ -275,6 +281,11 @@ struct MacAccountSettings: View {
         }
         .formStyle(.grouped)
         .onAppear { name = engine.me?.displayName ?? ""; bio = engine.me?.bio ?? "" }
+        .sheet(isPresented: Binding(get: { cropSource != nil }, set: { if !$0 { cropSource = nil } })) {
+            if let cropSource {
+                MacAvatarCropper(image: cropSource) { data in Task { try? await engine.updateProfile(avatar: data) } }
+            }
+        }
         .confirmationDialog("Sign out of this Mac?", isPresented: $confirmSignOut) {
             Button("Sign Out", role: .destructive) { Task { await engine.signOut() } }
         } message: { Text("This Mac's keys and stored messages are deleted. Your other devices keep working.") }
@@ -283,8 +294,8 @@ struct MacAccountSettings: View {
     func pickPhoto() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
-        guard panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url), let data = img.jpegData(maxSide: 640) else { return }
-        Task { try? await engine.updateProfile(avatar: data) }
+        guard panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) else { return }
+        cropSource = img
     }
 }
 
@@ -323,7 +334,7 @@ struct MacNotificationSettings: View {
             Button("Open System Settings…") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
             }
-            Text("While Asgard is open it notifies you itself, decrypting on this Mac. When it's closed, your server needs an Apple push key (Server Admin › Notifications).")
+            Text("While Asgard is open it notifies you itself, decrypting on this Mac. When it's closed, notifications come through your server's push relay, or its own Apple push key if it has one.")
                 .font(.callout).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

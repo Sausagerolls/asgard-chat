@@ -45,7 +45,7 @@
 		<string>INSetMessageAttributeIntent</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
-	<true/>
+	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.social-networking</string>
 	<key>NSAppTransportSecurity</key>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key><string>app-store-connect</string>
+	<key>destination</key><string>upload</string>
+	<key>signingStyle</key><string>manual</string>
+	<key>signingCertificate</key><string>Apple Distribution</string>
+	<key>uploadSymbols</key><true/>
+	<key>manageAppVersionAndBuildNumber</key><true/>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.giantmushroom.asgardchat</key><string>Asgard app App Store 20261028</string>
+		<key>com.giantmushroom.asgardchat.notify</key><string>Asgard notify App Store 20261028</string>
+		<key>com.giantmushroom.asgardchat.widgets</key><string>Asgard widgets App Store 20261028</string>
+		<key>com.giantmushroom.asgardchat.share</key><string>Asgard share App Store 20261028</string>
+	</dict>
+</dict>
+</plist>

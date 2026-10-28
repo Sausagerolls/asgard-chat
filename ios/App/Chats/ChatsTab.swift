@@ -57,6 +57,8 @@ struct ChatListView: View {
     @Binding var path: NavigationPath
     @Environment(ChatEngine.self) private var engine
     @Environment(Router.self) private var router
+    @Environment(Appearance.self) private var appearance
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\StoredConversation.sortDate, order: .reverse)]) private var all: [StoredConversation]
     @State private var folder: ChatFolder = .all
     @State private var search = ""
@@ -123,10 +125,17 @@ struct ChatListView: View {
                         Label(c.isMuted ? "Unmute" : "Mute", systemImage: c.isMuted ? "bell.fill" : "bell.slash.fill")
                     }.tint(.gray)
                 }
+                // Context menus are hosted outside this view tree and don't
+                // inherit its environment, so hand everything over explicitly.
                 .contextMenu {
-                    ChatRowMenu(conversation: c, customFolders: customFolders)
+                    ChatRowMenu(conversation: c, customFolders: customFolders).environment(engine)
                 } preview: {
-                    ChatPreview(conversationID: c.id).frame(width: 340, height: 460)
+                    ChatPreview(conversationID: c.id)
+                        .id(c.id) // otherwise SwiftUI reuses the first preview's query
+                        .environment(engine)
+                        .environment(appearance)
+                        .modelContext(modelContext)
+                        .frame(width: 340, height: 460)
                 }
             }
             if !search.isEmpty && !searchResults.isEmpty {

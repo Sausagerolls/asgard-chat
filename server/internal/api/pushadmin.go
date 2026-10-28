@@ -126,12 +126,18 @@ func (s *Server) adminPushStatus(w http.ResponseWriter, r *http.Request) error {
 	} else if s.cfg.FCMCredsPath != "" {
 		fp.Source = "environment"
 	}
-	var devices struct{ APNs, FCM int }
+	var devices struct{ APNs, FCM, Relay int }
 	s.db.QueryRow(ctx, `SELECT count(*) FILTER (WHERE push_kind = 'apns' AND push_token <> ''),
-		count(*) FILTER (WHERE push_kind = 'fcm' AND push_token <> '') FROM devices`).Scan(&devices.APNs, &devices.FCM)
+		count(*) FILTER (WHERE push_kind = 'fcm' AND push_token <> ''),
+		count(*) FILTER (WHERE push_kind = 'relay' AND push_token <> '') FROM devices`).Scan(&devices.APNs, &devices.FCM, &devices.Relay)
+	// The official apps notify through the relay, so own keys are optional when it's on.
+	var relay any
+	if rc := s.push.Relay(); rc != nil {
+		relay = map[string]string{"url": rc.URL}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"apns": ap, "fcm": fp, "default_topic": s.cfg.APNsTopic,
-		"devices":   map[string]int{"apns": devices.APNs, "fcm": devices.FCM},
+		"apns": ap, "fcm": fp, "relay": relay, "default_topic": s.cfg.APNsTopic,
+		"devices":   map[string]int{"apns": devices.APNs, "fcm": devices.FCM, "relay": devices.Relay},
 		"can_store": len(s.cfg.MasterKey) == 32,
 	})
 	return nil

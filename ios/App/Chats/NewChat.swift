@@ -91,6 +91,7 @@ struct CreateConversationView: View {
     @State private var disappearing = 0
     @State private var photo: PhotosPickerItem?
     @State private var avatar: UIImage?
+    @State private var cropSource: UIImage?
     @State private var working = false
     @State private var error: String?
 
@@ -156,8 +157,9 @@ struct CreateConversationView: View {
         }
         .task(id: query) { users = await engine.searchUsers(query) }
         .onChange(of: photo) { _, item in
-            Task { if let d = try? await item?.loadTransferable(type: Data.self) { avatar = UIImage(data: d)?.squareThumbnail(512) } }
+            Task { if let d = try? await item?.loadTransferable(type: Data.self) { cropSource = UIImage(data: d) } }
         }
+        .avatarCropper($cropSource, side: 512) { avatar = $0 }
     }
 
     func toggle(_ id: UUID) { if selected.contains(id) { selected.remove(id) } else { selected.insert(id) } }

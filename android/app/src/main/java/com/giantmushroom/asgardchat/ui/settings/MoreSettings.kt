@@ -108,11 +108,17 @@ internal fun AppearanceExtras() {
             }
         }
         Text("Text size", fontWeight = FontWeight.SemiBold)
+        // Applied when the finger lifts: rescaling the whole app mid-drag moves the slider away.
+        var draft by remember(a.textScale) { mutableStateOf(a.textScale) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("A", fontSize = 12.sp)
-            Slider(a.textScale, { a.chooseTextScale((it * 20).toInt() / 20f) }, Modifier.weight(1f).padding(horizontal = 8.dp), valueRange = 0.8f..1.3f)
+            Slider(draft, { draft = (it * 20).toInt() / 20f }, Modifier.weight(1f).padding(horizontal = 8.dp), valueRange = 0.8f..1.3f,
+                onValueChangeFinished = { a.chooseTextScale(draft) })
             Text("A", fontSize = 20.sp)
         }
+        // Live preview; fixed height so the slider doesn't move while it grows.
+        Text("Messages and chats will look like this.", fontSize = 16.sp * (draft / a.textScale), maxLines = 2,
+            modifier = Modifier.fillMaxWidth().height(64.dp))
     }
 }
 

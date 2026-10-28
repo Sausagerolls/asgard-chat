@@ -6,7 +6,7 @@ Draft text for the App Store listing. Reviewer passwords are NOT stored here
 ## App information
 
 - **Name:** Asgard Chat
-- **Subtitle (30):** Private chat on your own server
+- **Subtitle (30):** Private chat, your own server
 - **Primary category:** Social Networking
 - **Secondary category:** Productivity
 - **Content rights:** Does not contain third-party content

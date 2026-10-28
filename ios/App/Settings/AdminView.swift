@@ -15,8 +15,10 @@ struct AdminView: View {
 
     nonisolated struct PushStatus: Decodable, Sendable {
         nonisolated struct Source: Decodable, Sendable { var configured: Bool; var source: String?; var key_id: String?; var project_id: String? }
+        nonisolated struct Relay: Decodable, Sendable { var url: String }
         var apns: Source
         var fcm: Source
+        var relay: Relay?
     }
     nonisolated struct PushResult: Decodable, Sendable { var name: String; var status: String; var error: String? }
 
@@ -43,16 +45,26 @@ struct AdminView: View {
             }
             if let push {
                 Section {
-                    LabeledContent("Apple", value: push.apns.configured ? "On" + (push.apns.key_id.map { " · key \($0)" } ?? "") : "Not set up")
-                    LabeledContent("Android", value: push.fcm.configured ? "On" + (push.fcm.project_id.map { " · \($0)" } ?? "") : "Not set up")
+                    if let relay = push.relay {
+                        LabeledContent("Push relay", value: "On · " + (URL(string: relay.url)?.host() ?? relay.url))
+                    }
+                    // With the relay on, own keys only matter for self-built apps, so show them only if set.
+                    if push.relay == nil || push.apns.configured {
+                        LabeledContent("Own Apple key", value: push.apns.configured ? "On" + (push.apns.key_id.map { " · key \($0)" } ?? "") : "Not set up")
+                    }
+                    if push.relay == nil || push.fcm.configured {
+                        LabeledContent("Own Google key", value: push.fcm.configured ? "On" + (push.fcm.project_id.map { " · \($0)" } ?? "") : "Not set up")
+                    }
                     Button("Send a test notification to my devices") { Task { await testPush() } }
-                        .disabled(!push.apns.configured && !push.fcm.configured)
+                        .disabled(push.relay == nil && !push.apns.configured && !push.fcm.configured)
                     if let pushTest { Text(pushTest).font(.footnote).foregroundStyle(.secondary) }
-                    if let url = engine.account?.serverURL.appending(path: "admin") {
+                    if push.relay == nil, let url = engine.account?.serverURL.appending(path: "admin") {
                         Link(destination: url) { Label("Upload push keys in the web admin", systemImage: "safari") }
                     }
                 } header: { Text("Notifications") } footer: {
-                    Text("Your server sends notifications with your own Apple and Google keys. Upload them in the web admin's Notifications page.")
+                    Text(push.relay != nil
+                         ? "Notifications go through the Asgard push relay, which never sees message contents."
+                         : "Turn on the Asgard push relay on your server, or upload your own Apple and Google keys in the web admin's Notifications page.")
                 }
             }
             Section {

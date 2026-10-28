@@ -34,8 +34,22 @@ struct SettingsTab: View {
                     NavigationLink { StorageSettings() } label: { SettingsLabel("Storage & data", "externaldrive.fill", .teal) }
                     NavigationLink { StarredView(conversationID: nil) } label: { SettingsLabel("Starred messages", "star.fill", .yellow) }
                 }
-                if engine.me?.isAdmin == true {
-                    Section("Server") {
+                Section("Server") {
+                    LabeledContent {
+                        Text(engine.isDemo ? "Demo" : engine.account?.serverURL.host() ?? "—")
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(engine.serverInfo?.name ?? "Server")
+                                Text(engine.connection == .connected ? "Connected" : "Connecting…")
+                                    .font(.caption).foregroundStyle(engine.connection == .connected ? .green : .secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "globe").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                                .frame(width: 30, height: 30).background(Color.cyan.gradient, in: .rect(cornerRadius: 8))
+                        }
+                    }
+                    if engine.me?.isAdmin == true {
                         NavigationLink { AdminView() } label: { SettingsLabel("Server admin", "server.rack", .indigo) }
                     }
                 }
@@ -78,6 +92,7 @@ struct ProfileEditor: View {
     @State private var bio = ""
     @State private var photo: PhotosPickerItem?
     @State private var avatar: UIImage?
+    @State private var cropSource: UIImage?
     @State private var saving = false
 
     var body: some View {
@@ -112,16 +127,19 @@ struct ProfileEditor: View {
         }
         .onAppear { name = engine.me?.displayName ?? ""; bio = engine.me?.bio ?? "" }
         .onChange(of: photo) { _, item in
-            Task { if let d = try? await item?.loadTransferable(type: Data.self) { avatar = UIImage(data: d)?.squareThumbnail(640) } }
+            Task { if let d = try? await item?.loadTransferable(type: Data.self) { cropSource = UIImage(data: d) } }
         }
+        .avatarCropper($cropSource, side: 640) { avatar = $0 }
     }
 }
 
 struct AppearanceSettings: View {
     @Environment(Appearance.self) private var appearance
+    @State private var textDraft = 1.0
 
     var body: some View {
         @Bindable var a = appearance
+        ScrollViewReader { proxy in
         Form {
             Section {
                 PreviewBubbles().frame(height: 170).listRowInsets(EdgeInsets())
@@ -169,13 +187,39 @@ struct AppearanceSettings: View {
                 Toggle("Message animations", isOn: $a.messageAnimations)
             }
             Section("Text size") {
-                Slider(value: $a.textScale, in: 0.8...1.3, step: 0.05) { Text("Text size") } minimumValueLabel: { Text("A").font(.caption) } maximumValueLabel: { Text("A").font(.title3) }
+                // Applied when the finger lifts: resizing the whole app mid-drag
+                // moved the slider out from under the finger.
+                // One stop per Dynamic Type size, so every step visibly changes the preview.
+                let stops = Appearance.textScaleStops
+                Slider(value: Binding(get: { Double(stops.firstIndex { $0 >= textDraft - 0.001 } ?? stops.count - 1) },
+                                      set: { textDraft = stops[Int($0.rounded())] }),
+                       in: 0...Double(stops.count - 1), step: 1) { Text("Text size") }
+                    minimumValueLabel: { Text("A").font(.caption) } maximumValueLabel: { Text("A").font(.title3) }
+                    onEditingChanged: { editing in
+                        guard !editing else { return }
+                        appearance.textScale = textDraft
+                        // Resizing the app shifts the rows above; bring the slider back into view.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(50))
+                            proxy.scrollTo("textSize", anchor: .center)
+                        }
+                    }
+                // Fixed height so the slider doesn't move while the preview grows.
+                // An explicit point size: a .dynamicTypeSize override doesn't reach text inside List rows.
+                Text("Messages and chats will look like this.")
+                    .font(.system(size: UIFont.preferredFont(forTextStyle: .body,
+                        compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(Appearance.typeSize(for: textDraft)))).pointSize))
+                    .lineLimit(2).minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64, alignment: .leading)
             }
+            .id("textSize")
             Section("App icon") {
                 AppIconPicker()
             }
         }
+        }
         .navigationTitle("Appearance")
+        .onAppear { textDraft = appearance.textScale }
     }
 }
 

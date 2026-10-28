@@ -224,6 +224,7 @@ public final class ChatEngine {
         tasks.forEach { $0.cancel() }
         tasks = []
         cursor = 0
+        serverInfo = nil // the next account may be on another server
         accountStore.delete()
         AppGroup.defaults.removeObject(forKey: "demoMode")
         try? context.delete(model: StoredMessage.self)
@@ -1178,7 +1179,9 @@ public final class ChatEngine {
         if let token { AppGroup.defaults.set(hex(token), forKey: "apnsToken") }
         if let voipToken { AppGroup.defaults.set(hex(voipToken), forKey: "voipToken") }
         let apns = AppGroup.defaults.string(forKey: "apnsToken") ?? "", voip = AppGroup.defaults.string(forKey: "voipToken") ?? ""
-        if serverInfo == nil { serverInfo = try? await api.info() }
+        // Always ask: a cached value may belong to a server this device used before,
+        // and a relay handle bound to the wrong server ID can't be used.
+        if let fresh = try? await api.info() { serverInfo = fresh }
         // Servers that use the Asgard push relay only ever get opaque handles, never device tokens.
         if let relay = serverInfo?.pushRelay, let url = URL(string: relay.url) {
             let handle = await relayHandle(url, server: relay.serverID, token: apns)

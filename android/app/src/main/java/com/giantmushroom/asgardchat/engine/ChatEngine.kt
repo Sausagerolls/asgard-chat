@@ -233,6 +233,7 @@ class ChatEngine(private val context: Context) {
         withContext(Dispatchers.IO) { db.clearAllTables() }
         mediaDir.deleteRecursively()
         account = null; api = null; realtime = null
+        serverInfo.value = null // the next account may be on another server
         me.value = null
         phase.value = Phase.SignedOut
     }
@@ -815,7 +816,8 @@ class ChatEngine(private val context: Context) {
      */
     suspend fun registerPush(token: String) {
         val api = api ?: return
-        if (serverInfo.value == null) serverInfo.value = runCatching { api.info() }.getOrNull()
+        // Always ask: a cached value may belong to a server this phone used before.
+        runCatching { api.info() }.getOrNull()?.let { serverInfo.value = it }
         val relay = serverInfo.value?.pushRelay
         val handle = relay?.let { r ->
             runCatching {

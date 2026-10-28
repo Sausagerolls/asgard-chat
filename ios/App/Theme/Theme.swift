@@ -71,6 +71,21 @@ final class Appearance {
     var bubbles: BubbleStyle { didSet { save() } }
     var wallpaper: Wallpaper { didSet { save() } }
     var textScale: Double { didSet { save() } }
+
+    /// The text-size slider's stops; each one is a distinct Dynamic Type size.
+    static let textScaleStops: [Double] = [0.8, 0.85, 0.9, 1.0, 1.1, 1.2, 1.3]
+
+    static func typeSize(for scale: Double) -> DynamicTypeSize {
+        switch scale {
+        case ..<0.825: .xSmall
+        case ..<0.875: .small
+        case ..<0.95: .medium
+        case ..<1.05: .large
+        case ..<1.15: .xLarge
+        case ..<1.25: .xxLarge
+        default: .xxxLarge
+        }
+    }
     var animatedBackgrounds: Bool { didSet { save() } }
     var messageAnimations: Bool { didSet { save() } }
 

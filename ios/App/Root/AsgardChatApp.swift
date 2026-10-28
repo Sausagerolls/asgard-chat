@@ -19,7 +19,7 @@ struct AsgardChatApp: App {
                 .modelContainer(AppServices.shared.engine.container)
                 .preferredColorScheme(appearance.theme.scheme)
                 .tint(appearance.accent.color)
-                .dynamicTypeSize(appearance.textScale > 1.15 ? .xxLarge : appearance.textScale < 0.9 ? .small : .large)
+                .dynamicTypeSize(Appearance.typeSize(for: appearance.textScale))
                 .onOpenURL { AppServices.shared.router.open($0) }
                 .onContinueUserActivity("INSendMessageIntent") { AppServices.shared.router.handle($0) }
                 .onContinueUserActivity("INStartCallIntent") { AppServices.shared.router.handle($0) }

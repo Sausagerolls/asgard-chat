@@ -88,7 +88,27 @@ final class MacServices {
         await engine.start()
         if engine.phase == .ready, !engine.isDemo { MacNotifications.requestAndRegister() }
         updateBadge()
+        #if DEBUG
+        screenshotSetup()
+        #endif
     }
+
+    #if DEBUG
+    /// App Store screenshots: -screenshot <n> sizes the main window to 1280x800
+    /// and opens the nth chat in the list.
+    private func screenshotSetup() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-screenshot"), i + 1 < args.count, let n = Int(args[i + 1]) else { return }
+        let convs = (try? ModelContext(engine.container).fetch(FetchDescriptor<StoredConversation>(sortBy: [SortDescriptor(\.sortDate, order: .reverse)]))) ?? []
+        if n < convs.count { nav.selection = convs[n].id }
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+            window.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 800), display: true)
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate()
+    }
+    #endif
 
     /// Desktop notification unless the user is already looking at that chat.
     func notify(_ row: StoredMessage) {

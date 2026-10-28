@@ -277,6 +277,7 @@ struct EditConversationSheet: View {
     @State private var about = ""
     @State private var photo: PhotosPickerItem?
     @State private var avatar: UIImage?
+    @State private var cropSource: UIImage?
 
     var body: some View {
         NavigationStack {
@@ -309,8 +310,9 @@ struct EditConversationSheet: View {
                 about = engine.conversation(conversationID)?.description ?? ""
             }
             .onChange(of: photo) { _, item in
-                Task { if let d = try? await item?.loadTransferable(type: Data.self) { avatar = UIImage(data: d)?.squareThumbnail(512) } }
+                Task { if let d = try? await item?.loadTransferable(type: Data.self) { cropSource = UIImage(data: d) } }
             }
+            .avatarCropper($cropSource, side: 512) { avatar = $0 }
         }
     }
 }

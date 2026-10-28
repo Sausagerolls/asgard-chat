@@ -42,8 +42,8 @@ targets:
         com.apple.developer.siri: true
         com.apple.developer.usernotifications.communication: true
         com.apple.developer.usernotifications.time-sensitive: true
-        # Needs "CarPlay Communication" (not Audio) on the App ID; uncomment once Apple assigns it:
-        # com.apple.developer.carplay-communication: true
+        # "CarPlay Communication" (not Audio), granted by Apple on 2026-10-28.
+        com.apple.developer.carplay-communication: true
     info:
       path: App/Info.plist
       properties:
@@ -51,7 +51,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         AppIdentifierPrefix: $(AppIdentifierPrefix)
-        ITSAppUsesNonExemptEncryption: true
+        ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         LSApplicationCategoryType: public.app-category.social-networking
@@ -129,7 +129,7 @@ targets:
         NSLocalNetworkUsageDescription: Connect to an Asgard server on your home network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-        ITSAppUsesNonExemptEncryption: true
+        ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
           - CFBundleURLName: com.giantmushroom.asgardchat
             CFBundleURLSchemes: [asgard]
@@ -234,6 +234,18 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID).share
 
+  AsgardUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: AsgardChat
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ASGARD_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+
 schemes:
   AsgardChat:
     build:
@@ -241,6 +253,9 @@ schemes:
         AsgardChat: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets: [AsgardUITests]
     archive:
       config: Release
   AsgardMac:

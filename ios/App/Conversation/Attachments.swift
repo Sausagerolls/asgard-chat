@@ -359,14 +359,6 @@ extension NSItemProvider {
     }
 }
 
-extension UIImage {
-    func squareThumbnail(_ side: CGFloat) -> UIImage? {
-        let s = min(size.width, size.height)
-        let crop = CGRect(x: (size.width - s) / 2, y: (size.height - s) / 2, width: s, height: s)
-        guard let cg = cgImage?.cropping(to: crop.applying(CGAffineTransform(scaleX: scale, y: scale))) else { return self }
-        return UIImage(cgImage: cg, scale: 1, orientation: imageOrientation).preparingThumbnail(of: CGSize(width: side, height: side))
-    }
-}
 
 struct CameraPicker: UIViewControllerRepresentable {
     var onCapture: (Data, String) -> Void

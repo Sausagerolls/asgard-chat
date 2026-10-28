@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -153,8 +154,22 @@ private fun SettingsRoot(open: (Page) -> Unit) {
             Row_(Icons.Filled.Star, Color(0xFFFFCC00), "Starred messages") { open(Page.Starred) }
             Row_(Icons.Filled.History, Color(0xFF5856D6), "Message history") { open(Page.History) }
         }
-        if (me?.isAdmin == true) Column(Modifier.glass()) {
-            Row_(Icons.Filled.Dns, Color(0xFF5856D6), "Server admin") { open(Page.Admin) }
+        val info by engine.serverInfo.collectAsState()
+        val connection by engine.connection.collectAsState()
+        val connected = connection == com.giantmushroom.asgardchat.net.ConnectionState.connected
+        Column(Modifier.glass()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(30.dp).background(Color(0xFF32ADE6), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Public, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+                Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                    Text(info?.name ?: "Server")
+                    Text(if (connected) "Connected" else "Connecting…", fontSize = 12.sp,
+                        color = if (connected) Color(0xFF34C759) else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(engine.account?.serverURL?.let { android.net.Uri.parse(it).host } ?: "—", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (me?.isAdmin == true) Row_(Icons.Filled.Dns, Color(0xFF5856D6), "Server admin") { open(Page.Admin) }
         }
         Column(Modifier.glass()) {
             Row_(Icons.Filled.Info, Color.Gray, "About Asgard") { open(Page.About) }
@@ -197,18 +212,17 @@ private fun ProfilePage() {
     var bio by remember { mutableStateOf(me?.bio ?: "") }
     var saved by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var cropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val pickPhoto = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
-            val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }?.let { bmp ->
-                    val side = minOf(bmp.width, bmp.height)
-                    val square = android.graphics.Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
-                    val scaled = android.graphics.Bitmap.createScaledBitmap(square, 640, 640, true)
-                    java.io.ByteArrayOutputStream().also { scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
-                }
-            }
-            jpeg?.let { runCatching { engine.updateProfile(avatarJpeg = it) } }
+            cropSource = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.giantmushroom.asgardchat.ui.components.decodePhoto(context, uri) }
+        }
+    }
+    cropSource?.let { bmp ->
+        com.giantmushroom.asgardchat.ui.components.AvatarCropper(bmp, onCancel = { cropSource = null }) { jpeg ->
+            cropSource = null
+            scope.launch { runCatching { engine.updateProfile(avatarJpeg = jpeg) } }
         }
     }
     Column(Modifier.glass().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
