@@ -9,6 +9,7 @@
 //	asgard user set-admin USERNAME true|false
 //	asgard user disable USERNAME true|false
 //	asgard healthcheck                exit 0 if the local server answers /healthz
+//	asgard demo [-url U] [-state F] [-accounts u:p,u:p]  seed a review server, then share history with new devices
 package main
 
 import (
@@ -32,6 +33,7 @@ import (
 	"github.com/giantmushroom/asgard-chat/server/internal/auth"
 	"github.com/giantmushroom/asgard-chat/server/internal/config"
 	"github.com/giantmushroom/asgard-chat/server/internal/db"
+	"github.com/giantmushroom/asgard-chat/server/internal/demo"
 	"github.com/giantmushroom/asgard-chat/server/internal/push"
 	"github.com/giantmushroom/asgard-chat/server/internal/realtime"
 	"github.com/giantmushroom/asgard-chat/server/internal/storage"
@@ -54,6 +56,19 @@ func main() {
 		err = healthcheck()
 	case "migrate", "invite", "user":
 		err = cli(args)
+	case "demo":
+		fs := flag.NewFlagSet("demo", flag.ExitOnError)
+		url := fs.String("url", "http://localhost:8080", "server to seed")
+		state := fs.String("state", "/data/demo.json", "state file (holds tokens and recovery keys)")
+		accounts := fs.String("accounts", os.Getenv("ASGARD_DEMO_ACCOUNTS"), "comma-separated user:password pairs, first run only")
+		fs.Parse(args[1:])
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		var logins []string
+		if *accounts != "" {
+			logins = strings.Split(*accounts, ",")
+		}
+		err = demo.Run(ctx, *url, *state, logins)
 	case "version":
 		fmt.Println(version)
 	default:

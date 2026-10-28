@@ -31,7 +31,7 @@ struct MacChatView: View {
             MacMessageList(conversationID: conversationID, kind: kind)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if kind.hasVoiceRoom {
+            if kind.hasVoiceRoom, engine.callsAvailable {
                 MacVoiceRoomBar(conversationID: conversationID).padding(.horizontal, 14).padding(.top, 8)
             }
         }
@@ -56,10 +56,10 @@ struct MacChatView: View {
         .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if kind == .dm {
+                if kind == .dm, engine.callsAvailable {
                     Button { Task { await calls.startCall(conversationID, video: false) } } label: { Image(systemName: "phone") }.help("Voice Call")
                     Button { Task { await calls.startCall(conversationID, video: true) } } label: { Image(systemName: "video") }.help("Video Call")
-                } else if kind.hasVoiceRoom {
+                } else if kind.hasVoiceRoom, engine.callsAvailable {
                     Button { Task { await calls.joinVoiceRoom(conversationID, video: false) } } label: { Image(systemName: "speaker.wave.2") }
                         .help("Join Voice Room")
                 }

@@ -29,6 +29,8 @@ public final class ChatEngine {
     public private(set) var phase: Phase = .loading
     public internal(set) var me: User?
     public private(set) var serverInfo: ServerInfo?
+    /// False when the server runs without LiveKit, so the apps hide call buttons.
+    public var callsAvailable: Bool { isDemo || serverInfo?.features.calls != false }
     public private(set) var connection: ConnectionState = .disconnected
     public internal(set) var typing: [UUID: [UUID: TypingState]] = [:]
     public internal(set) var readMarks: [UUID: [UUID: Int64]] = [:]

@@ -136,6 +136,8 @@ import kotlin.math.abs
 fun ChatScreen(conversationID: String, back: () -> Unit) {
     val engine = AsgardApp.engine
     val conv by engine.dao.conversationFlow(conversationID).collectAsState(null)
+    val info by engine.serverInfo.collectAsState()
+    val callsOn = info?.features?.calls != false
     // null until the database answers, so "already here" and "just arrived" can be told apart.
     val loaded by remember(conversationID) { engine.dao.messages(conversationID) }.collectAsState(null)
     val messages = loaded ?: emptyList()
@@ -176,12 +178,12 @@ fun ChatScreen(conversationID: String, back: () -> Unit) {
                     }
                 }
                 }
-                if (kind == ConversationKind.dm) Row(Modifier.padding(start = 8.dp).glass(RoundedCornerShape(50))) {
+                if (kind == ConversationKind.dm && callsOn) Row(Modifier.padding(start = 8.dp).glass(RoundedCornerShape(50))) {
                     IconButton({ Calls.start(conversationID, video = true) }) { Icon(Icons.Filled.Videocam, "Video call", tint = MaterialTheme.colorScheme.primary) }
                     IconButton({ Calls.start(conversationID, video = false) }) { Icon(Icons.Filled.Call, "Voice call", tint = MaterialTheme.colorScheme.primary) }
                 }
             }
-            if (kind.hasVoiceRoom) VoiceRoomBar(conversationID, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            if (kind.hasVoiceRoom && callsOn) VoiceRoomBar(conversationID, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             MessageList(messages, loaded != null, kind, Modifier.weight(1f), onReply = { replyTo = it }, onEdit = { editing = it })
             val canPost = kind != ConversationKind.channel || conv?.conversation?.me?.role.let { it == MemberRole.owner || it == MemberRole.admin }
             if (canPost) Composer(conversationID, replyTo, editing, conv?.draft ?: "") { replyTo = null; editing = null }

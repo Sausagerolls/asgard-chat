@@ -116,7 +116,7 @@ struct ChatView: View {
 
     @ViewBuilder var topInsets: some View {
         VStack(spacing: 6) {
-            if conversation?.kind.hasVoiceRoom == true {
+            if conversation?.kind.hasVoiceRoom == true, engine.callsAvailable {
                 VoiceRoomBar(conversationID: conversationID)
             }
             if let p = pinned.first {
@@ -160,7 +160,7 @@ struct ChatView: View {
             Button { showInfo = true } label: { ChatHeader(conversationID: conversationID) }.buttonStyle(.plain)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            if let c = conversation, c.kind == .dm {
+            if let c = conversation, c.kind == .dm, engine.callsAvailable {
                 Button { Task { await calls.start(conversationID, video: true) } } label: { Image(systemName: "video") }
                     .accessibilityLabel("Video call")
                 Button { Task { await calls.start(conversationID, video: false) } } label: { Image(systemName: "phone") }

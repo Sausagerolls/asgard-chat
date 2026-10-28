@@ -1,0 +1,43 @@
+# App Store review / demo server: Asgard + Postgres only, separate data and
+# secrets, no calls (a web demo link can't carry call media, so the apps hide
+# call buttons when the server has no LiveKit). Push works through the relay.
+#
+#   ./setup.sh   # in a separate copy of deploy/, so secrets aren't shared
+#   docker compose -f docker-compose.yml -f docker-compose.review.yml up -d --build
+#
+# .env: APPDATA=/mnt/cache/appdata/asgard-review, ASGARD_PUBLIC_URL=https://demo.example.com
+#       ASGARD_DEMO_ACCOUNTS=reviewer1:password,reviewer2:password
+# The demo service seeds a DM and a group between the first two accounts
+# (create both and a DM + group between them first), then hands new devices
+# the history recovery key so reviewers see the conversation after signing in.
+name: asgard-review
+
+services:
+  caddy: { profiles: ["off"] }
+  livekit: { profiles: ["off"] }
+  backup: { profiles: ["off"] }
+
+  asgard:
+    ports: ["${ASGARD_HTTP_PORT:-8090}:8080"]
+    environment:
+      ASGARD_PUBLIC_URL: ${ASGARD_PUBLIC_URL}
+      ASGARD_LIVEKIT_URL: ""
+      ASGARD_LIVEKIT_API_KEY_FILE: ""
+      ASGARD_LIVEKIT_API_SECRET_FILE: ""
+    volumes:
+      - ${APPDATA:-/mnt/cache/appdata/asgard-review}/data:/data
+
+  demo:
+    image: asgard-chat/server:${ASGARD_VERSION:-dev}
+    restart: unless-stopped
+    depends_on: { asgard: { condition: service_healthy } }
+    command: ["demo", "-url", "http://asgard:8080", "-state", "/data/demo.json"]
+    environment:
+      ASGARD_DEMO_ACCOUNTS: ${ASGARD_DEMO_ACCOUNTS:-}
+    volumes:
+      - ${APPDATA:-/mnt/cache/appdata/asgard-review}/demo:/data
+    healthcheck: { disable: true }
+
+  postgres:
+    volumes:
+      - ${APPDATA:-/mnt/cache/appdata/asgard-review}/postgres:/var/lib/postgresql/data

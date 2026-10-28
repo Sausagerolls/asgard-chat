@@ -62,6 +62,13 @@ final class AppServices {
         guard !started else { return }
         started = true
         await engine.start()
+        #if DEBUG
+        // Screenshots: -signIn <server> <username> <password> on a fresh install.
+        let launch = ProcessInfo.processInfo.arguments
+        if engine.phase != .ready, let i = launch.firstIndex(of: "-signIn"), i + 3 < launch.count, let url = URL(string: launch[i + 1]) {
+            try? await engine.signIn(server: url, username: launch[i + 2], password: launch[i + 3], deviceName: "Simulator")
+        }
+        #endif
         if engine.phase == .ready && !engine.isDemo { PushRegistrar.shared.register() }
         Notifications.registerCategories()
         // UI testing / screenshots: -openChat <uuid>, -tab <calls|settings>

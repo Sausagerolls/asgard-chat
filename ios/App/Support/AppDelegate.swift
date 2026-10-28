@@ -69,6 +69,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 final class PushRegistrar {
     static let shared = PushRegistrar()
     func register() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-noPush") { return } // screenshots
+        #endif
         Task {
             let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .providesAppNotificationSettings])) ?? false
             if granted { UIApplication.shared.registerForRemoteNotifications() }

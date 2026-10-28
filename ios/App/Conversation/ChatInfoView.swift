@@ -91,7 +91,7 @@ struct ChatInfoView: View {
         Section {
             GlassEffectContainer {
                 HStack(spacing: 10) {
-                    if isDM || conversation?.kind == .group {
+                    if isDM || conversation?.kind == .group, engine.callsAvailable {
                         ActionTile(icon: "phone.fill", title: "Audio") { Task { await calls.start(conversationID, video: false) } }
                         ActionTile(icon: "video.fill", title: "Video") { Task { await calls.start(conversationID, video: true) } }
                     }

@@ -95,6 +95,9 @@ fun MainScreen(openChat: MutableState<String?>) {
     LaunchedEffect(openChat.value) { openChat.value?.let { chat = it; tab = Tab.Chats; openChat.value = null } }
     val convs by AsgardApp.engine.dao.conversations().collectAsState(emptyList())
     val unread = convs.filter { !it.isMuted && !it.archived }.sumOf { it.unread }
+    // Servers without LiveKit have no calls, so the Calls tab goes away.
+    val info by AsgardApp.engine.serverInfo.collectAsState()
+    val tabs = if (info?.features?.calls == false) Tab.entries - Tab.Calls else Tab.entries
 
     Box(Modifier.fillMaxSize()) {
         when (tab) {
@@ -102,7 +105,7 @@ fun MainScreen(openChat: MutableState<String?>) {
             Tab.Calls -> CallsTab { chat = it; tab = Tab.Chats }
             Tab.Settings -> SettingsTab { chat = it; tab = Tab.Chats }
         }
-        if (chat == null) TabBar(tab, unread, Modifier.align(Alignment.BottomCenter)) { tab = it }
+        if (chat == null) TabBar(tabs, tab, unread, Modifier.align(Alignment.BottomCenter)) { tab = it }
         AnimatedVisibility(chat != null, enter = slideInHorizontally { it } + fadeIn(), exit = slideOutHorizontally { it } + fadeOut()) {
             chat?.let { id -> ChatScreen(id) { chat = null } }
         }
@@ -113,10 +116,10 @@ fun MainScreen(openChat: MutableState<String?>) {
 
 /** Floating glass capsule tab bar, like iOS 26. */
 @Composable
-private fun TabBar(selected: Tab, unread: Int, modifier: Modifier, onSelect: (Tab) -> Unit) {
+private fun TabBar(tabs: List<Tab>, selected: Tab, unread: Int, modifier: Modifier, onSelect: (Tab) -> Unit) {
     Row(modifier.navigationBarsPadding().padding(bottom = 10.dp).glass(RoundedCornerShape(32.dp), strong = true).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Tab.entries.forEach { t ->
+        tabs.forEach { t ->
             val on = t == selected
             Column(Modifier.clip(RoundedCornerShape(26.dp)).background(if (on) Color.White.copy(alpha = 0.14f) else Color.Transparent)
                 .clickable { onSelect(t) }.padding(horizontal = 22.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -339,9 +339,12 @@ struct ChatPreview: View {
     let conversationID: UUID
     @Query private var messages: [StoredMessage]
     @Environment(Appearance.self) private var appearance
+    // Bubbles read reply/reaction state from a session; the preview needs its own.
+    @State private var session: ChatSession
 
     init(conversationID: UUID) {
         self.conversationID = conversationID
+        _session = State(initialValue: ChatSession(conversationID: conversationID))
         var d = FetchDescriptor<StoredMessage>(predicate: #Predicate { $0.conversationID == conversationID }, sortBy: [SortDescriptor(\.sortKey, order: .reverse)])
         d.fetchLimit = 12
         _messages = Query(d)
@@ -358,6 +361,8 @@ struct ChatPreview: View {
             }
             .padding(8)
         }
+        .environment(session)
+        .allowsHitTesting(false)
     }
 }
 
